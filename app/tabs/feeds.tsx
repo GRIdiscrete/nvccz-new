@@ -8,7 +8,6 @@ import {
   TrendingDown,
   DollarSign,
   Newspaper,
-  BarChart3,
   Globe,
   Filter,
   RefreshCw,
@@ -17,15 +16,12 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ZW } from "country-flag-icons/react/3x2";
 
 // External components / utils from your codebase
 import { FeedItem, BankRatesResponse } from "@/types.db";
-import { BankRatesCard } from "@/components/rss-feeds/BankRatesCard";
 import { FeedCard } from "@/components/rss-feeds/FeedCard";
 import { categories, isFinancialOrEconomic, categorizeByRegion } from "@/utils/feedUtils";
 import ZimFinancialData from "@/components/MenuAllFinancialData";
-import FloatingRBZData from "@/components/rss-feeds/FloatingRBZData";
 import WeatherCard from "@/components/rss-feeds/sidebar/WeatherCard";
 
 // ---------------------------------------------------------------------------
@@ -33,7 +29,7 @@ import WeatherCard from "@/components/rss-feeds/sidebar/WeatherCard";
 const fetcher = async (url: string) => fetch(url).then((res) => res.json());
 
 // ---------------------------------------------------------------------------
-// Combined Rate Card (polished + mobile-friendly)
+// Combined Rate Card
 const CombinedRateCard = ({
   cryptoData,
   forexData,
@@ -64,10 +60,6 @@ const CombinedRateCard = ({
 
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-900/90 via-indigo-800/90 to-purple-900/90 p-4 shadow-[0_8px_30px_rgba(79,70,229,0.2)] backdrop-blur-xl transition-all duration-300 hover:shadow-[0_8px_30px_rgba(79,70,229,0.3)]">
-      {/* Animated background effect */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 via-purple-600/5 to-blue-600/10 opacity-30" />
-      <div className="absolute -inset-[100%] animate-[spin_60s_linear_infinite] bg-[conic-gradient(from_0deg,transparent_0_340deg,rgba(56,189,248,0.1)_360deg)] blur-3xl" />
-      
       {/* Header */}
       <div className="relative mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -119,9 +111,9 @@ const CombinedRateCard = ({
             transition={{ duration: 0.18 }}
             className={`divide-y divide-indigo-800/50 ${isTransitioning ? "pointer-events-none opacity-60" : "opacity-100"}`}
           >
-            {list.map((item, idx) => (
+            {list.map((item) => (
               <li
-                key={`${currentView}-${idx}`}
+                key={currentView === "crypto" ? `crypto-${item.symbol}` : `forex-${item.pair}`}
                 className="flex min-h-[42px] items-center justify-between gap-2 rounded-lg py-2 px-3 transition-colors hover:bg-indigo-800/30"
               >
                 <div className="min-w-0 flex-1">
@@ -156,7 +148,7 @@ const CombinedRateCard = ({
         </AnimatePresence>
       </div>
 
-      {/* Nav controls (mobile friendly) */}
+      {/* Nav controls */}
       <div className="relative mt-3 flex items-center justify-between">
         <button
           onClick={() => switchView(currentView === "crypto" ? "forex" : "crypto")}
@@ -201,18 +193,8 @@ const FeedPage = () => {
   );
 
   const [selectedCategory, setSelectedCategory] = useState("african");
-  
-  // Prevent category from changing unexpectedly
-  const handleCategoryChange = (categoryId: string) => {
-    setSelectedCategory(categoryId);
-    // Scroll to top of feeds container to prevent scroll interference
-    const feedsContainer = document.querySelector('[data-feeds-container]');
-    if (feedsContainer) {
-      feedsContainer.scrollTop = 0;
-    }
-  };
   const [searchTerm, setSearchTerm] = useState("");
-  const [visibleCount, setVisibleCount] = useState(12); // infinite-scroll placeholder
+  const [visibleCount, setVisibleCount] = useState(12);
 
   useEffect(() => setMounted(true), []);
 
@@ -221,10 +203,10 @@ const FeedPage = () => {
   const filteredFeeds = useMemo(
     () =>
       feedsData.filter((feed) => {
-        if (!isFinancialOrEconomic(feed)) return false; // domain filter first
+        if (!isFinancialOrEconomic(feed)) return false;
         const feedCategory = categorizeByRegion(feed);
-        if (feedCategory !== selectedCategory) return false; // region filter
-        if (!searchTerm) return true; // text search
+        if (feedCategory !== selectedCategory) return false;
+        if (!searchTerm) return true;
         const q = searchTerm.toLowerCase();
         return (
           feed.title.toLowerCase().includes(q) || feed.contentSnippet?.toLowerCase().includes(q)
@@ -237,7 +219,6 @@ const FeedPage = () => {
     await mutate();
   };
 
-  // Fallback rates when APIs are empty
   const getRatesData = () => {
     let forexRates = [
       { pair: "USD/ZWL", rate: "24,500", change: "+0.8%", trend: "up" },
@@ -278,7 +259,7 @@ const FeedPage = () => {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
-              key={i}
+              key={`skeleton-${i}`}
               className="h-40 animate-pulse rounded-2xl border border-slate-700/60 bg-slate-800/40"
             />
           ))}
@@ -325,15 +306,12 @@ const FeedPage = () => {
         </div>
       </header>
 
-
-
-      {/* RBZ + Summary modules */}
+      {/* RBZ + Summary */}
       <section className="mx-auto max-w-7xl px-2 py-2 sm:px-3">
-        {/* <div className="mb-2"><FloatingRBZData /></div> */}
         <div className="mb-2"><ZimFinancialData /></div>
       </section>
 
-      {/* Main layout - Dynamic Magazine Grid */}
+      {/* Main Grid */}
       <main className="mx-auto max-w-7xl px-2 pb-6 sm:px-3">
         {/* Search & Filters */}
         <div className="mb-4 rounded-2xl border border-input bg-card/80 p-3 shadow-sm backdrop-blur">
@@ -353,12 +331,12 @@ const FeedPage = () => {
             </div>
           </div>
 
-          {/* Category pills (scrollable on mobile) */}
+          {/* Category Pills */}
           <div className="mt-2 flex gap-2 overflow-x-auto pb-3 scrollbar-container">
             {categories.map((category) => (
               <button
                 key={category.id}
-                onClick={() => handleCategoryChange(category.id)}
+                onClick={() => setSelectedCategory(category.id)}
                 className={`flex-shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
                   selectedCategory === category.id
                     ? "bg-primary-100 text-primary-900 border-2 border-primary-600 shadow-md font-bold"
@@ -383,7 +361,7 @@ const FeedPage = () => {
           </h2>
         </div>
 
-        {/* Dynamic Bing-style Grid Layout */}
+        {/* Grid */}
         {filteredFeeds.length > 0 && !feedsLoading && (
           <>
             <div 
@@ -393,24 +371,16 @@ const FeedPage = () => {
                 gridAutoRows: 'minmax(140px, auto)',
                 gridTemplateRows: 'repeat(auto-fit, minmax(140px, auto))'
               }} 
-              aria-live="polite" 
-              aria-busy={feedsLoading}
             >
               {(() => {
-                // Separate feeds with and without images
-                const feedsWithImages = filteredFeeds.filter(feed => 
-                  feed.imageUrl || (feed.enclosure && feed.enclosure.url)
-                );
-                const feedsWithoutImages = filteredFeeds.filter(feed => 
-                  !feed.imageUrl && !(feed.enclosure && feed.enclosure.url)
-                );
+                const feedsWithImages = filteredFeeds.filter(feed => feed.imageUrl || (feed.enclosure && feed.enclosure.url));
+                const feedsWithoutImages = filteredFeeds.filter(feed => !feed.imageUrl && !(feed.enclosure && feed.enclosure.url));
 
-                // Create the grid items array including crypto, weather, and feeds
-                const gridItems = [];
+                const gridItems: { key: string; component: React.ReactNode }[] = [];
 
-                // Add crypto card as first item (small tile)
+                // Crypto card
                 gridItems.push({
-                  type: 'crypto',
+                  key: "card-crypto",
                   component: (
                     <motion.div
                       initial={{ y: 10, opacity: 0 }}
@@ -429,9 +399,9 @@ const FeedPage = () => {
                   )
                 });
 
-                // Add weather card as second item (small tile)
+                // Weather card
                 gridItems.push({
-                  type: 'weather',
+                  key: "card-weather",
                   component: (
                     <motion.div
                       initial={{ y: 10, opacity: 0 }}
@@ -445,54 +415,28 @@ const FeedPage = () => {
                   )
                 });
 
-                // Add feeds prioritizing images
+                // Feeds
                 let imageIndex = 0;
                 let textIndex = 0;
                 let feedItemIndex = 0;
-
-                // Improved algorithm to minimize white space
                 const totalItems = Math.min(visibleCount, feedsWithImages.length + feedsWithoutImages.length);
-                
+
                 while (gridItems.length < totalItems + 2 && (imageIndex < feedsWithImages.length || textIndex < feedsWithoutImages.length)) {
-                  // Prioritize filling with image content first, then text content
                   if (imageIndex < feedsWithImages.length) {
                     const feed = feedsWithImages[imageIndex];
-                    let colSpan: string, rowSpan: string, size: 'small' | 'medium' | 'large' | 'featured';
-
-                    // Smarter tile sizing to reduce gaps
-                    if (feedItemIndex === 0) {
-                      // First feed item gets featured tile
-                      colSpan = 'col-span-2 md:col-span-4 lg:col-span-4';
-                      rowSpan = 'row-span-4';
-                      size = 'featured';
-                    } else if (feedItemIndex % 7 === 0 && feedItemIndex > 0) {
-                      // Every 7th item gets large tile
-                      colSpan = 'col-span-2 md:col-span-3 lg:col-span-3';
-                      rowSpan = 'row-span-3';
-                      size = 'large';
-                    } else {
-                      // Other image items get medium tiles
-                      colSpan = 'col-span-2 md:col-span-2 lg:col-span-2';
-                      rowSpan = 'row-span-3';
-                      size = 'medium';
-                    }
+                    const feedKey = feed.guid || feed.link || `image-${imageIndex}`;
 
                     gridItems.push({
-                      type: 'feed',
+                      key: `feed-${feedKey}`,
                       component: (
                         <motion.div
-                          key={feed.guid || `image-${imageIndex}`}
                           initial={{ y: 10, opacity: 0 }}
                           whileInView={{ y: 0, opacity: 1 }}
                           viewport={{ once: true, margin: "-50px" }}
                           transition={{ duration: 0.25, delay: 0.05 * feedItemIndex, ease: "easeOut" }}
-                          className={`group relative ${colSpan} ${rowSpan}`}
+                          className="group relative col-span-2 md:col-span-2 lg:col-span-2 row-span-3"
                         >
-                          <div className="h-full [--x:50%] [--y:50%] relative overflow-hidden rounded-xl shadow-sm transition-all hover:shadow-md">
-                            <FeedCard feed={feed} size={size} />
-                            <div className="pointer-events-none absolute -inset-12 opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-40" 
-                                 style={{ background: "radial-gradient(600px circle at var(--x,50%) var(--y,50%), rgba(56,189,248,.10), transparent 40%)" }} />
-                          </div>
+                          <FeedCard feed={feed} size="medium" />
                         </motion.div>
                       )
                     });
@@ -500,27 +444,22 @@ const FeedPage = () => {
                     imageIndex++;
                     feedItemIndex++;
                   }
-                  
-                  // Fill remaining space with text items
+
                   if (imageIndex >= feedsWithImages.length && textIndex < feedsWithoutImages.length) {
                     const feed = feedsWithoutImages[textIndex];
-                    
+                    const feedKey = feed.guid || feed.link || `text-${textIndex}`;
+
                     gridItems.push({
-                      type: 'feed',
+                      key: `feed-${feedKey}`,
                       component: (
                         <motion.div
-                          key={feed.guid || `text-${textIndex}`}
                           initial={{ y: 10, opacity: 0 }}
                           whileInView={{ y: 0, opacity: 1 }}
                           viewport={{ once: true, margin: "-50px" }}
                           transition={{ duration: 0.25, delay: 0.05 * feedItemIndex, ease: "easeOut" }}
                           className="group relative col-span-2 md:col-span-2 lg:col-span-2 row-span-2"
                         >
-                          <div className="h-full [--x:50%] [--y:50%] relative overflow-hidden rounded-xl shadow-sm transition-all hover:shadow-md min-h-[280px]">
-                            <FeedCard feed={feed} size="small" />
-                            <div className="pointer-events-none absolute -inset-12 opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-40" 
-                                 style={{ background: "radial-gradient(600px circle at var(--x,50%) var(--y,50%), rgba(56,189,248,.10), transparent 40%)" }} />
-                          </div>
+                          <FeedCard feed={feed} size="small" />
                         </motion.div>
                       )
                     });
@@ -530,16 +469,18 @@ const FeedPage = () => {
                   }
                 }
 
-                return gridItems.map((item, idx) => item.component);
+                return gridItems.map(item => (
+                  <React.Fragment key={item.key}>{item.component}</React.Fragment>
+                ));
               })()}
             </div>
 
-            {/* Load more button */}
+            {/* Load more */}
             {visibleCount < filteredFeeds.length && (
               <div className="mt-6 flex justify-center">
                 <motion.button
-                  onClick={() => setVisibleCount((c) => c + 9)}
-                  className="group relative overflow-hidden rounded-full bg-gradient-to-r from-sky-600 to-indigo-600 px-6 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                  onClick={() => setVisibleCount(c => c + 9)}
+                  className="group relative overflow-hidden rounded-full bg-gradient-to-r from-sky-600 to-indigo-600 px-6 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:shadow-lg"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -560,7 +501,7 @@ const FeedPage = () => {
             <button 
               onClick={() => {
                 setSearchTerm('');
-                handleCategoryChange('zimbabwean');
+                setSelectedCategory('zimbabwean');
               }}
               className="rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
             >
