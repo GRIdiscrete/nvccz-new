@@ -28,13 +28,13 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
       try {
         setIsLoading(true)
         const result = await fetchRbzExchangeRates()
-        
+
         if (result.success && result.data) {
           // Filter out header row if it exists
           const filteredRates = result.data.exchange_rates.filter(
             rate => !(rate.currency === "CURRENCY" && rate.bid === "BID")
           )
-          
+
           setData({
             ...result.data,
             exchange_rates: filteredRates
@@ -46,7 +46,6 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
           setError(result.error || "Failed to fetch exchange rates")
         }
       } catch (err) {
-        // Use fallback data on error
         setData(sampleExchangeData)
         setError("Failed to fetch exchange rates")
         console.error("Error loading exchange rates:", err)
@@ -67,33 +66,41 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
 
     const scroll = () => {
       if (!tickerRef.current || isPaused) return
-
-      scrollPosition += 0.5 // Adjust speed here
+      scrollPosition += 0.5 // Adjust speed
       if (scrollPosition >= scrollWidth) {
         scrollPosition = 0
       }
       tickerRef.current.style.transform = `translateX(-${scrollPosition}px)`
     }
 
-    const intervalId = setInterval(scroll, 20) // 50fps
-
+    const intervalId = setInterval(scroll, 20) // ~50fps
     return () => clearInterval(intervalId)
   }, [isPaused, isLoading])
 
-  const formatValue = (value: number | string): string => {
-    if (typeof value === "string") return value
+  // --- Helpers ---
+  const formatValue = (value: number | string | null | undefined): string => {
+    if (value == null || value === "") return "--"
+    if (typeof value === "string") {
+      const num = Number.parseFloat(value)
+      return isNaN(num) ? value : num.toFixed(4)
+    }
     return value.toFixed(4)
   }
 
-  const getChangeColor = (bid: number | string, ask: number | string): string => {
-    const bidNum = typeof bid === "string" ? Number.parseFloat(bid) : bid
-    const askNum = typeof ask === "string" ? Number.parseFloat(ask) : ask
+  const getChangeColor = (
+    bid: number | string | null | undefined,
+    ask: number | string | null | undefined
+  ): string => {
+    const bidNum = typeof bid === "string" ? Number.parseFloat(bid) : bid ?? NaN
+    const askNum = typeof ask === "string" ? Number.parseFloat(ask) : ask ?? NaN
 
+    if (isNaN(bidNum) || isNaN(askNum)) return "text-slate-500"
     if (bidNum > askNum) return "text-green-600"
     if (bidNum < askNum) return "text-red-600"
     return "text-black"
   }
 
+  // --- Render ---
   if (isLoading) {
     return (
       <div className={`relative bg-slate-100 border border-slate-200 ${className}`}>
@@ -113,23 +120,23 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
 
   return (
     <div className={`relative bg-slate-100 border border-slate-200 overflow-hidden ${className}`}>
-      {/* Error indicator (if using fallback data) */}
+      {/* Error indicator if fallback */}
       {error && (
         <div className="absolute top-1 left-4 text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded">
-          .
+          !
         </div>
       )}
 
       {/* Ticker Content */}
-      <div 
-        className="py-3 px-4" 
-        onMouseEnter={() => setIsPaused(true)} 
+      <div
+        className="py-3 px-4"
+        onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
       >
         <div
           ref={tickerRef}
           className="flex items-center gap-8 whitespace-nowrap transition-transform"
-          style={{ willChange: 'transform' }}
+          style={{ willChange: "transform" }}
         >
           {/* Duplicate the data for seamless loop */}
           {[...data.exchange_rates, ...data.exchange_rates].map((rate, index) => (
@@ -138,11 +145,15 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
                 <span className="font-semibold text-slate-800 text-sm">{rate.currency}</span>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-slate-600">BID:</span>
-                  <span className={`font-medium ${getChangeColor(rate.bid, rate.ask)}`}>{formatValue(rate.bid)}</span>
+                  <span className={`font-medium ${getChangeColor(rate.bid, rate.ask)}`}>
+                    {formatValue(rate.bid)}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-slate-600">ASK:</span>
-                  <span className={`font-medium ${getChangeColor(rate.ask, rate.bid)}`}>{formatValue(rate.ask)}</span>
+                  <span className={`font-medium ${getChangeColor(rate.ask, rate.bid)}`}>
+                    {formatValue(rate.ask)}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-slate-600">AVG:</span>
@@ -155,18 +166,11 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
         </div>
       </div>
 
-      {/* Status Info
-      <div className="absolute top-2 right-4 text-xs text-slate-500">
-        Updated: {data.date} | Source: {data.source}
-        {error && " (Fallback Data)"}
-      </div> */}
-
-      {/* Gradient overlays for smooth fade */}
+      {/* Gradient overlays */}
       <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-slate-100 to-transparent pointer-events-none z-10" />
       <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-100 to-transparent pointer-events-none z-10" />
     </div>
   )
 }
 
-// Also export as default for easier importing
 export default TickerStrip

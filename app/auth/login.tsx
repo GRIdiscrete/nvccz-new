@@ -168,22 +168,6 @@ const LoginPage = () => {
                 </motion.div>
 
                 {/* Remember + Forgot */}
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="flex items-center justify-between">
-                  <label className="flex items-center gap-2">
-                    <input
-                      id="remember-me"
-                      name="remember-me"
-                      type="checkbox"
-                      className="h-4 w-4 rounded bg-gray-200 border-gray-500 text-[#0056A4] focus:ring-[#0056A4]"
-                    />
-                    <span className="text-base text-gray-700">Remember me</span>
-                  </label>
-                  <div className="text-base">
-                    <Link href="/forgot-password" className="font-medium text-[#0056A4] hover:underline">
-                      Forgot password?
-                    </Link>
-                  </div>
-                </motion.div>
 
                 {/* Button */}
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}>
