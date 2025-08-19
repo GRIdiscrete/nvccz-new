@@ -4,16 +4,17 @@ import { API_BASE_URL } from "@/lib/constants";
 
 export type FormattedExchangeRate = {
   currency: string;
-  bid: number | string;
-  ask: number | string;
-  avg: number | string;
+  mid_rate: number | string;
+  pair: number | string;
+  we_buy: number | string;
+  we_sell: number | string;
 };
 
 export type FinalExchangeRateResponse = {
   status: string;
   date: string; // formatted DD-MM-YYYY
-  timestamp: string;
-  source: string;
+  date_iso : string;
+  source: "Infrastructure Development Bank of Zimbabwe(IDBZ)";
   url: string;
   exchange_rates: FormattedExchangeRate[];
 };
@@ -56,24 +57,26 @@ export async function fetchRbzExchangeRates(): Promise<{
     const formatted: FormattedExchangeRate[] = [
       {
         currency: "CURRENCY",
-        bid: "BID",
-        ask: "ASK",
-        avg: "AVG",
+        mid_rate: "MID_RATE",
+        pair: "PAIR",
+        we_buy: "WE_BUY",
+        we_sell: "WE_SELL",
       },
       ...json.exchange_rates.map((rate: any) => ({
         currency: rate.currency,
-        bid: rate.bid,
-        ask: rate.ask,
-        avg: rate.avg,
+        mid_rate: rate.mid_rate,
+        pair: rate.pair,
+        we_buy: rate.we_buy,
+        we_sell: rate.we_sell,
       })),
     ];
 
     const finalData: FinalExchangeRateResponse = {
       status: json.status,
       source: json.source,
-      timestamp: json.timestamp,
       url: json.url,
       date: formatDateToDDMMYYYY(json.date),
+      date_iso: json.date,
       exchange_rates: formatted,
     };
 

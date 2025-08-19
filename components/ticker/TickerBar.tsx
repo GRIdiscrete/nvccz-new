@@ -6,9 +6,10 @@ import { sampleExchangeData } from "@/lib/constants"
 
 export type FormattedExchangeRate = {
   currency: string
-  bid: number | string
-  ask: number | string
-  avg: number | string
+  mid_rate: number | string
+  pair: number | string
+  we_buy: number | string
+  we_sell: number | string
 }
 
 interface TickerStripProps {
@@ -32,7 +33,7 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
         if (result.success && result.data) {
           // Filter out header row if it exists
           const filteredRates = result.data.exchange_rates.filter(
-            rate => !(rate.currency === "CURRENCY" && rate.bid === "BID")
+            rate => !(rate.currency === "CURRENCY" && rate.mid_rate === "MID_RATE")
           )
 
           setData({
@@ -88,15 +89,15 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
   }
 
   const getChangeColor = (
-    bid: number | string | null | undefined,
-    ask: number | string | null | undefined
+    we_buy: number | string | null | undefined,
+    we_sell: number | string | null | undefined
   ): string => {
-    const bidNum = typeof bid === "string" ? Number.parseFloat(bid) : bid ?? NaN
-    const askNum = typeof ask === "string" ? Number.parseFloat(ask) : ask ?? NaN
+    const buyNum = typeof we_buy === "string" ? Number.parseFloat(we_buy) : we_buy ?? NaN
+    const sellNum = typeof we_sell === "string" ? Number.parseFloat(we_sell) : we_sell ?? NaN
 
-    if (isNaN(bidNum) || isNaN(askNum)) return "text-slate-500"
-    if (bidNum > askNum) return "text-green-600"
-    if (bidNum < askNum) return "text-red-600"
+    if (isNaN(buyNum) || isNaN(sellNum)) return "text-slate-500"
+    if (buyNum > sellNum) return "text-green-600"
+    if (buyNum < sellNum) return "text-red-600"
     return "text-black"
   }
 
@@ -144,20 +145,24 @@ export function TickerStrip({ className = "" }: TickerStripProps) {
               <div className="flex items-center gap-3">
                 <span className="font-semibold text-slate-800 text-sm">{rate.currency}</span>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-600">BID:</span>
-                  <span className={`font-medium ${getChangeColor(rate.bid, rate.ask)}`}>
-                    {formatValue(rate.bid)}
+                  <span className="text-slate-600">WE BUY:</span>
+                  <span className={`font-medium ${getChangeColor(rate.we_buy, rate.we_sell)}`}>
+                    {formatValue(rate.we_buy)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-600">ASK:</span>
-                  <span className={`font-medium ${getChangeColor(rate.ask, rate.bid)}`}>
-                    {formatValue(rate.ask)}
+                  <span className="text-slate-600">WE SELL:</span>
+                  <span className={`font-medium ${getChangeColor(rate.we_sell, rate.we_buy)}`}>
+                    {formatValue(rate.we_sell)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-slate-600">AVG:</span>
-                  <span className="font-medium text-slate-700">{formatValue(rate.avg)}</span>
+                  <span className="text-slate-600">MID:</span>
+                  <span className="font-medium text-slate-700">{formatValue(rate.mid_rate)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-600">PAIR:</span>
+                  <span className="font-medium text-blue-600">{rate.pair}</span>
                 </div>
               </div>
               {index < data.exchange_rates.length * 2 - 1 && <div className="w-px h-4 bg-slate-300" />}
