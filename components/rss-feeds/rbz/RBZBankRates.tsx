@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Building2, RefreshCw, AlertCircle, Percent, ArrowUpDown } from 'lucide-react';
 import { fetchInflationRates, type InflationRatesResponse } from '@/pages/api/rbz-inflation-rates';
 import { fetchRbzExchangeRates, type FinalExchangeRateResponse } from '@/pages/api/rbz-exchange-rates';
@@ -9,7 +9,7 @@ interface RBZBankRatesProps {
   className?: string;
 }
 
-// Local, strongly-typed shape used for rendering in this component
+// Local, strongly-typed shape used for rendering exchange rows
 type ExchangeRow = {
   currency: string;
   bid: number | string | null | undefined;
@@ -47,26 +47,24 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
     return value.toFixed(4);
   };
 
-  // Normalize whatever the API gives us into { currency, bid, ask, avg }
+  // Normalize whatever the API gives us into { currency, bid, ask, avg } and drop header-like rows
   const normalizeExchangeRates = (rows: any[]): ExchangeRow[] => {
     if (!Array.isArray(rows)) return [];
 
     return rows
-      // Drop header-like rows defensively
       .filter((r) => {
         const currency = r?.currency ?? r?.CURRENCY ?? r?.[0];
-        const bid = r?.bid ?? r?.BID ?? r?.buy ?? r?.[1];
-        return !(
-          (typeof currency === 'string' && currency.toUpperCase() === 'CURRENCY') ||
-          (typeof bid === 'string' && bid.toUpperCase() === 'BID')
-        );
+        const bid = r?.bid ?? r?.BID ?? r?.buy ?? r?.BUY ?? r?.[1];
+        // remove rows that look like headers
+        if (typeof currency === 'string' && currency.toUpperCase() === 'CURRENCY') return false;
+        if (typeof bid === 'string' && bid.toUpperCase() === 'BID') return false;
+        return true;
       })
       .map((r, idx): ExchangeRow => {
         const currency = r?.currency ?? r?.CURRENCY ?? r?.[0] ?? `CUR-${idx}`;
         const bid = r?.bid ?? r?.BID ?? r?.buy ?? r?.BUY ?? r?.[1] ?? null;
         const ask = r?.ask ?? r?.ASK ?? r?.sell ?? r?.SELL ?? r?.[2] ?? null;
         const avg = r?.avg ?? r?.AVG ?? r?.mid ?? r?.MID ?? r?.[3] ?? null;
-
         return { currency: String(currency), bid, ask, avg };
       });
   };
@@ -80,8 +78,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
       if (result.success && result.data) {
         setInflationData(result.data);
       } else {
-        const errorMsg = result.error || 'Failed to fetch inflation rates data';
-        setInflationError(errorMsg);
+        setInflationError(result.error || 'Failed to fetch inflation rates data');
       }
     } catch (err: any) {
       setInflationError(err?.message || 'An unexpected error occurred');
@@ -99,9 +96,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
         setExchangeData(result.data);
         setNormalizedRates(normalizeExchangeRates(result.data.exchange_rates));
       } else {
-        const errorMsg = result.error || 'Failed to fetch exchange rates data';
-        setExchangeError(errorMsg);
-        // still try to normalize if any shape is present
+        setExchangeError(result.error || 'Failed to fetch exchange rates data');
         setNormalizedRates(normalizeExchangeRates(result?.data?.exchange_rates ?? []));
       }
     } catch (err: any) {
@@ -173,7 +168,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
             <Percent className="w-5 h-5 text-red-400" />
             <h4 className="text-lg font-semibold text-white">Inflation Rates</h4>
           </div>
-
+          
           {inflationError ? (
             <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
               <div className="flex items-center space-x-3">
@@ -210,7 +205,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                   </div>
                 </div>
               </div>
-
+              
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -242,7 +237,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                   </tbody>
                 </table>
               </div>
-
+              
               <div className="mt-3 text-xs text-gray-500">
                 Date: {inflationData.date} • Source: {inflationData.source}
               </div>
@@ -256,7 +251,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
             <ArrowUpDown className="w-5 h-5 text-green-400" />
             <h4 className="text-lg font-semibold text-white">Exchange Rates</h4>
           </div>
-
+          
           {exchangeError ? (
             <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
               <div className="flex items-center space-x-3">
@@ -304,7 +299,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                   </tbody>
                 </table>
               </div>
-
+              
               <div className="mt-3 text-xs text-gray-500">
                 Date: {exchangeData?.date ?? 'N/A'} • Source: {exchangeData?.source ?? 'N/A'}
               </div>
