@@ -2,7 +2,7 @@
 
 import ProfileMenu from "@/components/ProfileMenu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { EventsData } from "@/types.db";
 import Posts from "./tabs/posts";
@@ -14,6 +14,14 @@ import { ChatbotProvider } from "@/components/chatbot";
 import HomepageSidebar from "@/components/HomepageSidebar";
 import Layout from "@/components/layout/Layout";
 import { TickerStrip } from "@/components/ticker/TickerBar";
+import Dashboard from "./tabs/dashboard";
+import {
+  Newspaper,
+  MessageSquareText,
+  CalendarDays,
+  Gauge,
+  PanelsTopLeft,
+} from "lucide-react";
 
 export default function Home() {
   const [currentTab, setCurrentTab] = useState("feed");
@@ -57,33 +65,6 @@ export default function Home() {
     }
   }, [router]);
 
-  // Sticky tabs
-  useEffect(() => {
-    let raf = 0;
-    const handleScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        if (!tabsContainerRef.current) return;
-        const rect = tabsContainerRef.current.getBoundingClientRect();
-        const nextSticky = rect.top <= 0;
-        setIsTabsSticky((prev) => (prev !== nextSticky ? nextSticky : prev));
-      });
-    };
-
-    const scrollContainer =
-      document.querySelector(".overflow-auto") || window;
-    (scrollContainer as any).addEventListener("scroll", handleScroll, {
-      passive: true,
-    });
-    handleScroll();
-
-    return () => {
-      (scrollContainer as any).removeEventListener("scroll", handleScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [logged]);
-
   const TabsDemo = () => (
     <div className="text-foreground">
       {currentTab === "feed" && (
@@ -106,7 +87,24 @@ export default function Home() {
           <EventsCalendar events={eventsData} />
         </TabsContent>
       )}
+      {currentTab === "dashboard" && (
+        <TabsContent value="dashboard" className="text-gray-300">
+          <Dashboard />
+        </TabsContent>
+      )}
     </div>
+  );
+
+  // Icon + label map (short labels to ensure single-line fit)
+  const triggers = useMemo(
+    () => [
+      { id: "feed", label: "Feed", Icon: PanelsTopLeft },
+      { id: "newsletter", label: "News", Icon: Newspaper },
+      { id: "forum", label: "Forum", Icon: MessageSquareText },
+      { id: "calendar", label: "Cal", Icon: CalendarDays },
+      { id: "dashboard", label: "Dash", Icon: Gauge },
+    ],
+    []
   );
 
   return (
@@ -134,11 +132,6 @@ export default function Home() {
             <div className="flex-1 overflow-auto">
               <main className="p-6">
                 <div className="space-y-8">
-                  {/* Hero (no animation) */}
-                  <div>
-                    <HeroClient />
-                  </div>
-
                   {/* Tabs */}
                   <div
                     ref={tabsContainerRef}
@@ -153,40 +146,55 @@ export default function Home() {
                       <div
                         className={
                           isTabsSticky
-                            ? "sticky top-0 z-50 pb-4 pt-4 bg-blue-50/80 backdrop-blur-md will-change-transform"
+                            ? "sticky top-0 z-50 pb-3 pt-3 bg-blue-50/80 backdrop-blur-md will-change-transform"
                             : ""
                         }
                         style={
                           isTabsSticky ? { transform: "translateZ(0)" } : undefined
                         }
                       >
+                        {/*
+                          MODERN, MINIMAL TAB TRIGGERS
+                          - Subtle glass card container
+                          - Ghost/soft-selected pills
+                          - Reduced contrast for inactive icons/labels
+                          - Smooth hover without heavy shadows/gradients
+                        */}
                         <TabsList
                           ref={tabsRef}
-                          className="mb-8 grid w-full grid-cols-4 gap-2 sm:gap-3 rounded-xl border border-blue-200 bg-white p-1.5 sm:p-2 shadow-lg backdrop-blur"
+                          className="mb-6 flex w-full items-center gap-1 rounded-2xl border border-slate-200 bg-white/60 px-1.5 py-1 backdrop-blur supports-[backdrop-filter]:bg-white/50 overflow-x-auto whitespace-nowrap no-scrollbar"
+                          aria-label="Main sections"
                         >
-                          {[
-                            { id: "feed", label: "Feed" },
-                            { id: "newsletter", label: "News" },
-                            { id: "forum", label: "Forum" },
-                            { id: "calendar", label: "Calendar" },
-                          ].map((tab) => (
+                          {triggers.map(({ id, label, Icon }) => (
                             <TabsTrigger
-                              key={tab.id}
-                              value={tab.id}
-                              className="group relative w-full overflow-hidden rounded-xl px-2 sm:px-4 py-3 text-base font-semibold text-blue-400 data-[state=active]:text-white transition-colors"
+                              key={id}
+                              value={id}
+                              title={label}
+                              className="group relative inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3 md:px-3.5 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 data-[state=active]:text-slate-900 transition-colors"
                             >
-                              <span className="relative z-10 block text-center">
-                                {tab.label}
+                              {/* Soft pill background (hover/active) */}
+                              <span className="absolute inset-0 rounded-xl bg-slate-100/70 opacity-0 transition-opacity duration-200 group-hover:opacity-100 data-[state=active]:opacity-100" />
+
+                              {/* Thin hairline ring to define pills; intensifies when active */}
+                              <span className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-slate-200 data-[state=active]:ring-slate-300" />
+
+                              <span className="relative z-10 inline-flex items-center gap-2 min-w-0">
+                                <Icon className="size-4 flex-none opacity-70 group-hover:opacity-100 data-[state=active]:opacity-100" />
+                                <span className="truncate max-w-[6rem] xs:inline sm:inline md:inline">
+                                  {label}
+                                </span>
                               </span>
-                              <span className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 opacity-0 transition-opacity duration-300 data-[state=active]:opacity-100" />
-                              <span className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-blue-200 data-[state=active]:ring-blue-500/40" />
                             </TabsTrigger>
                           ))}
                         </TabsList>
                       </div>
 
-                      <div className="relative min-h-[300px] w-full rounded-xl border border-blue-200 p-6 shadow-xl bg-white backdrop-blur">
-                        <TabsDemo />
+                      <div className="relative min-h-[300px] w-full rounded-xl border border-blue-200 p-0 shadow-xl bg-white backdrop-blur">
+                        {/* subtle top border glow under sticky tabs */}
+                        <div className="pointer-events-none absolute -top-px left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-300/60 to-transparent" />
+                        <div className="p-6">
+                          <TabsDemo />
+                        </div>
                       </div>
                     </Tabs>
                   </div>
