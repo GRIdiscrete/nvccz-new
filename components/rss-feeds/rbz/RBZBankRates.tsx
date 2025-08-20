@@ -12,9 +12,10 @@ interface RBZBankRatesProps {
 // Local, strongly-typed shape used for rendering exchange rows
 type ExchangeRow = {
   currency: string;
-  bid: number | string | null | undefined;
-  ask: number | string | null | undefined;
-  avg: number | string | null | undefined;
+  we_buy: number | string | null | undefined;
+  we_sell: number | string | null | undefined;
+  mid_rate: number | string | null | undefined;
+  pair: string | null | undefined;
 };
 
 const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
@@ -47,25 +48,26 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
     return value.toFixed(4);
   };
 
-  // Normalize whatever the API gives us into { currency, bid, ask, avg } and drop header-like rows
+  // Normalize whatever the API gives us into { currency, we_buy, we_sell, mid_rate, pair } and drop header-like rows
   const normalizeExchangeRates = (rows: any[]): ExchangeRow[] => {
     if (!Array.isArray(rows)) return [];
 
     return rows
       .filter((r) => {
         const currency = r?.currency ?? r?.CURRENCY ?? r?.[0];
-        const bid = r?.bid ?? r?.BID ?? r?.buy ?? r?.BUY ?? r?.[1];
+        const we_buy = r?.we_buy ?? r?.WE_BUY ?? r?.buy ?? r?.BUY ?? r?.[1];
         // remove rows that look like headers
         if (typeof currency === 'string' && currency.toUpperCase() === 'CURRENCY') return false;
-        if (typeof bid === 'string' && bid.toUpperCase() === 'BID') return false;
+        if (typeof we_buy === 'string' && we_buy.toUpperCase() === 'WE_BUY') return false;
         return true;
       })
       .map((r, idx): ExchangeRow => {
         const currency = r?.currency ?? r?.CURRENCY ?? r?.[0] ?? `CUR-${idx}`;
-        const bid = r?.bid ?? r?.BID ?? r?.buy ?? r?.BUY ?? r?.[1] ?? null;
-        const ask = r?.ask ?? r?.ASK ?? r?.sell ?? r?.SELL ?? r?.[2] ?? null;
-        const avg = r?.avg ?? r?.AVG ?? r?.mid ?? r?.MID ?? r?.[3] ?? null;
-        return { currency: String(currency), bid, ask, avg };
+        const we_buy = r?.we_buy ?? r?.WE_BUY ?? r?.buy ?? r?.BUY ?? r?.[1] ?? null;
+        const we_sell = r?.we_sell ?? r?.WE_SELL ?? r?.sell ?? r?.SELL ?? r?.[2] ?? null;
+        const mid_rate = r?.mid_rate ?? r?.MID_RATE ?? r?.avg ?? r?.AVG ?? r?.mid ?? r?.MID ?? r?.[3] ?? null;
+        const pair = r?.pair ?? r?.PAIR ?? r?.[4] ?? null;
+        return { currency: String(currency), we_buy, we_sell, mid_rate, pair };
       });
   };
 
@@ -273,9 +275,10 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                   <thead>
                     <tr className="border-b border-gray-600">
                       <th className="text-left py-3 px-3 font-medium text-gray-300">Currency</th>
-                      <th className="text-right py-3 px-3 font-medium text-gray-300">Bid</th>
-                      <th className="text-right py-3 px-3 font-medium text-gray-300">Ask</th>
-                      <th className="text-right py-3 px-3 font-medium text-gray-300">Average</th>
+                      <th className="text-left py-3 px-3 font-medium text-gray-300">Pair</th>
+                      <th className="text-right py-3 px-3 font-medium text-gray-300">We Buy</th>
+                      <th className="text-right py-3 px-3 font-medium text-gray-300">We Sell</th>
+                      <th className="text-right py-3 px-3 font-medium text-gray-300">Mid Rate</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -285,14 +288,15 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                         className="border-b border-gray-700/50 hover:bg-gray-700/20 transition-colors"
                       >
                         <td className="py-3 px-3 text-white">{rate.currency}</td>
+                        <td className="py-3 px-3 text-blue-400 text-sm">{rate.pair || 'N/A'}</td>
                         <td className="text-right py-3 px-3 text-white">
-                          {formatExchangeValue(rate.bid)}
+                          {formatExchangeValue(rate.we_buy)}
                         </td>
                         <td className="text-right py-3 px-3 text-white">
-                          {formatExchangeValue(rate.ask)}
+                          {formatExchangeValue(rate.we_sell)}
                         </td>
                         <td className="text-right py-3 px-3 text-white">
-                          {formatExchangeValue(rate.avg)}
+                          {formatExchangeValue(rate.mid_rate)}
                         </td>
                       </tr>
                     ))}

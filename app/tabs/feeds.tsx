@@ -15,7 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
 // External components / utils from your codebase
 import { FeedItem, BankRatesResponse } from "@/types.db";
@@ -28,8 +27,15 @@ import WeatherCard from "@/components/rss-feeds/sidebar/WeatherCard";
 // Fetcher
 const fetcher = async (url: string) => fetch(url).then((res) => res.json());
 
+// SWR config (avoid surprise revalidations that cause flicker)
+const swrCfg = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+  revalidateIfStale: false,
+} as const;
+
 // ---------------------------------------------------------------------------
-// Combined Rate Card
+// Combined Rate Card (no animation)
 const CombinedRateCard = ({
   cryptoData,
   forexData,
@@ -42,16 +48,9 @@ const CombinedRateCard = ({
   forexLoading: boolean;
 }) => {
   const [currentView, setCurrentView] = useState<"crypto" | "forex">("crypto");
-  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const switchView = (newView: "crypto" | "forex") => {
-    if (newView !== currentView && !isTransitioning) {
-      setIsTransitioning(true);
-      setTimeout(() => {
-        setCurrentView(newView);
-        setIsTransitioning(false);
-      }, 150);
-    }
+    if (newView !== currentView) setCurrentView(newView);
   };
 
   const getCurrentTitle = () => (currentView === "crypto" ? "Cryptocurrency" : "Forex Rates");
@@ -59,7 +58,10 @@ const CombinedRateCard = ({
   const list = currentView === "crypto" ? cryptoData : forexData;
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-900/90 via-indigo-800/90 to-purple-900/90 p-4 shadow-[0_8px_30px_rgba(79,70,229,0.2)] backdrop-blur-xl transition-all duration-300 hover:shadow-[0_8px_30px_rgba(79,70,229,0.3)]">
+    <div
+      className="group relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-900/90 via-indigo-800/90 to-purple-900/90 p-4 shadow-[0_8px_30px_rgba(79,70,229,0.2)] backdrop-blur-xl transition-shadow duration-300 hover:shadow-[0_8px_30px_rgba(79,70,229,0.3)] will-change-transform"
+      style={{ transform: "translateZ(0)" }}
+    >
       {/* Header */}
       <div className="relative mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -67,9 +69,7 @@ const CombinedRateCard = ({
             <DollarSign size={18} />
           </span>
           <div>
-            <h3 className="text-base font-semibold text-white">
-              {getCurrentTitle()}
-            </h3>
+            <h3 className="text-base font-semibold text-white">{getCurrentTitle()}</h3>
             <p className="text-xs text-indigo-200/80">Live market rates</p>
           </div>
           {isCurrentlyLoading() && (
@@ -81,18 +81,18 @@ const CombinedRateCard = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => switchView("crypto")}
-            className={`h-3 w-3 rounded-full transition-all ${
-              currentView === "crypto" 
-                ? "bg-indigo-400 shadow-[0_0_0_4px_rgba(129,140,248,0.3)]" 
+            className={`h-3 w-3 rounded-full ${
+              currentView === "crypto"
+                ? "bg-indigo-400 shadow-[0_0_0_4px_rgba(129,140,248,0.3)]"
                 : "bg-indigo-700 hover:bg-indigo-600"
             }`}
             aria-label="Show crypto"
           />
           <button
             onClick={() => switchView("forex")}
-            className={`h-3 w-3 rounded-full transition-all ${
-              currentView === "forex" 
-                ? "bg-indigo-400 shadow-[0_0_0_4px_rgba(129,140,248,0.3)]" 
+            className={`h-3 w-3 rounded-full ${
+              currentView === "forex"
+                ? "bg-indigo-400 shadow-[0_0_0_4px_rgba(129,140,248,0.3)]"
                 : "bg-indigo-700 hover:bg-indigo-600"
             }`}
             aria-label="Show forex"
@@ -101,58 +101,49 @@ const CombinedRateCard = ({
       </div>
 
       {/* List */}
-      <div className="relative rounded-xl bg-indigo-950/30 p-2 backdrop-blur-sm">
-        <AnimatePresence mode="wait">
-          <motion.ul
-            key={currentView}
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.18 }}
-            className={`divide-y divide-indigo-800/50 ${isTransitioning ? "pointer-events-none opacity-60" : "opacity-100"}`}
-          >
-            {list.map((item) => (
-              <li
-                key={currentView === "crypto" ? `crypto-${item.symbol}` : `forex-${item.pair}`}
-                className="flex min-h-[42px] items-center justify-between gap-2 rounded-lg py-2 px-3 transition-colors hover:bg-indigo-800/30"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-indigo-100">
-                    {currentView === "crypto" ? item.symbol : item.pair}
-                  </p>
-                </div>
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="min-w-0 truncate text-right text-sm font-bold text-white">
-                    {currentView === "crypto" ? item.price : item.rate}
-                  </span>
-                  <span
-                    className={`inline-flex min-w-0 items-center truncate rounded-full px-2 py-0.5 text-xs font-medium ${
-                      item.trend === "up"
-                        ? "bg-emerald-500/20 text-emerald-300"
-                        : item.trend === "down"
-                        ? "bg-rose-500/20 text-rose-300"
-                        : "text-indigo-200"
-                    }`}
-                  >
-                    {item.trend === "up" ? (
-                      <TrendingUp className="mr-1 h-3 w-3 flex-shrink-0" />
-                    ) : item.trend === "down" ? (
-                      <TrendingDown className="mr-1 h-3 w-3 flex-shrink-0" />
-                    ) : null}
-                    <span className="truncate">{item.change}</span>
-                  </span>
-                </div>
-              </li>
-            ))}
-          </motion.ul>
-        </AnimatePresence>
+      <div className="relative rounded-xl bg-indigo-950/30 p-2 backdrop-blur-sm will-change-transform">
+        <ul className="divide-y divide-indigo-800/50">
+          {list.map((item) => (
+            <li
+              key={currentView === "crypto" ? `crypto-${item.symbol}` : `forex-${item.pair}`}
+              className="flex min-h-[42px] items-center justify-between gap-2 rounded-lg py-2 px-3 transition-colors hover:bg-indigo-800/30"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-indigo-100">
+                  {currentView === "crypto" ? item.symbol : item.pair}
+                </p>
+              </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 truncate text-right text-sm font-bold text-white">
+                  {currentView === "crypto" ? item.price : item.rate}
+                </span>
+                <span
+                  className={`inline-flex min-w-0 items-center truncate rounded-full px-2 py-0.5 text-xs font-medium ${
+                    item.trend === "up"
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : item.trend === "down"
+                      ? "bg-rose-500/20 text-rose-300"
+                      : "text-indigo-200"
+                  }`}
+                >
+                  {item.trend === "up" ? (
+                    <TrendingUp className="mr-1 h-3 w-3 flex-shrink-0" />
+                  ) : item.trend === "down" ? (
+                    <TrendingDown className="mr-1 h-3 w-3 flex-shrink-0" />
+                  ) : null}
+                  <span className="truncate">{item.change}</span>
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Nav controls */}
       <div className="relative mt-3 flex items-center justify-between">
         <button
           onClick={() => switchView(currentView === "crypto" ? "forex" : "crypto")}
-          className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-3 py-1.5 text-xs font-medium text-white shadow-md transition-all hover:shadow-lg"
+          className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-3 py-1.5 text-xs font-medium text-white shadow-md transition-shadow hover:shadow-lg"
         >
           {currentView === "crypto" ? "View Forex" : "View Crypto"}
         </button>
@@ -183,13 +174,23 @@ const FeedPage = () => {
 
   const { data, error, isLoading: feedsLoading, mutate } = useSWR<{ items: FeedItem[] }>(
     mounted ? "/api/feeds" : null,
-    fetcher
+    fetcher,
+    swrCfg
   );
-  const { data: cryptoData, isLoading: cryptoLoading } = useSWR(mounted ? "/api/crypto" : null, fetcher);
-  const { data: forexData, isLoading: forexLoading } = useSWR(mounted ? "/api/forex" : null, fetcher);
+  const { data: cryptoData, isLoading: cryptoLoading } = useSWR(
+    mounted ? "/api/crypto" : null,
+    fetcher,
+    swrCfg
+  );
+  const { data: forexData, isLoading: forexLoading } = useSWR(
+    mounted ? "/api/forex" : null,
+    fetcher,
+    swrCfg
+  );
   const { data: bankRatesData, isLoading: bankRatesLoading } = useSWR<BankRatesResponse>(
     mounted ? "/api/bankRates" : null,
-    fetcher
+    fetcher,
+    swrCfg
   );
 
   const [selectedCategory, setSelectedCategory] = useState("african");
@@ -208,9 +209,7 @@ const FeedPage = () => {
         if (feedCategory !== selectedCategory) return false;
         if (!searchTerm) return true;
         const q = searchTerm.toLowerCase();
-        return (
-          feed.title.toLowerCase().includes(q) || feed.contentSnippet?.toLowerCase().includes(q)
-        );
+        return feed.title.toLowerCase().includes(q) || feed.contentSnippet?.toLowerCase().includes(q);
       }),
     [feedsData, selectedCategory, searchTerm]
   );
@@ -233,8 +232,7 @@ const FeedPage = () => {
 
     return {
       crypto:
-        (Array.isArray(cryptoData) && cryptoData) ||
-        [
+        (Array.isArray(cryptoData) && cryptoData) || [
           { symbol: "BTC", price: "$43,250", change: "+2.4%", trend: "up" },
           { symbol: "ETH", price: "$2,580", change: "-1.2%", trend: "down" },
           { symbol: "BNB", price: "$315", change: "+0.8%", trend: "up" },
@@ -283,7 +281,10 @@ const FeedPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-white to-white" data-feeds-container>
       {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-input bg-card/90 backdrop-blur-xl">
+      <header
+        className="sticky top-0 z-20 border-b border-input bg-card/90 backdrop-blur-xl will-change-transform"
+        style={{ transform: "translateZ(0)" }}
+      >
         <div className="mx-auto max-w-7xl px-3 py-3 sm:px-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -308,7 +309,9 @@ const FeedPage = () => {
 
       {/* RBZ + Summary */}
       <section className="mx-auto max-w-7xl px-2 py-2 sm:px-3">
-        <div className="mb-2"><ZimFinancialData /></div>
+        <div className="mb-2">
+          <ZimFinancialData />
+        </div>
       </section>
 
       {/* Main Grid */}
@@ -323,7 +326,7 @@ const FeedPage = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 type="text"
                 placeholder="Search financial news…"
-                className="w-full rounded-xl border border-input bg-background/60 py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30"
+                className="w-full rounded-xl border border-input bg-background/60 py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -337,17 +340,13 @@ const FeedPage = () => {
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
-                className={`flex-shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                className={`flex-shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
                   selectedCategory === category.id
                     ? "bg-primary-100 text-primary-900 border-2 border-primary-600 shadow-md font-bold"
                     : "bg-slate-100 text-slate-700 border-2 border-transparent hover:bg-slate-200 hover:text-slate-900"
                 }`}
               >
-                {category.id === "african" ? (
-                  <MapPin size={16} />
-                ) : (
-                  <Globe size={16} />
-                )}
+                {category.id === "african" ? <MapPin size={16} /> : <Globe size={16} />}
                 <span>{category.name}</span>
               </button>
             ))}
@@ -364,17 +363,20 @@ const FeedPage = () => {
         {/* Grid */}
         {filteredFeeds.length > 0 && !feedsLoading && (
           <>
-            <div 
-              className="grid grid-cols-2 md:grid-cols-6 lg:grid-cols-8 gap-4" 
-              style={{ 
-                gridAutoFlow: 'row dense', 
-                gridAutoRows: 'minmax(140px, auto)',
-                gridTemplateRows: 'repeat(auto-fit, minmax(140px, auto))'
-              }} 
+            <div
+              className="grid grid-cols-2 md:grid-cols-6 lg:grid-cols-8 gap-4"
+              style={{
+                gridAutoFlow: "row",
+                gridAutoRows: "minmax(140px, auto)",
+              }}
             >
               {(() => {
-                const feedsWithImages = filteredFeeds.filter(feed => feed.imageUrl || (feed.enclosure && feed.enclosure.url));
-                const feedsWithoutImages = filteredFeeds.filter(feed => !feed.imageUrl && !(feed.enclosure && feed.enclosure.url));
+                const feedsWithImages = filteredFeeds.filter(
+                  (feed) => feed.imageUrl || (feed.enclosure && feed.enclosure.url)
+                );
+                const feedsWithoutImages = filteredFeeds.filter(
+                  (feed) => !feed.imageUrl && !(feed.enclosure && feed.enclosure.url)
+                );
 
                 const gridItems: { key: string; component: React.ReactNode }[] = [];
 
@@ -382,46 +384,40 @@ const FeedPage = () => {
                 gridItems.push({
                   key: "card-crypto",
                   component: (
-                    <motion.div
-                      initial={{ y: 10, opacity: 0 }}
-                      whileInView={{ y: 0, opacity: 1 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.3, delay: 0.1 }}
-                      className="col-span-2 md:col-span-2 lg:col-span-2 row-span-3"
-                    >
+                    <div className="col-span-2 md:col-span-2 lg:col-span-2 row-span-3">
                       <CombinedRateCard
                         cryptoData={rates.crypto}
                         forexData={rates.forex}
                         cryptoLoading={cryptoLoading}
                         forexLoading={forexLoading}
                       />
-                    </motion.div>
-                  )
+                    </div>
+                  ),
                 });
 
                 // Weather card
                 gridItems.push({
                   key: "card-weather",
                   component: (
-                    <motion.div
-                      initial={{ y: 10, opacity: 0 }}
-                      whileInView={{ y: 0, opacity: 1 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.3, delay: 0.2 }}
-                      className="col-span-2 md:col-span-2 lg:col-span-2 row-span-3"
-                    >
+                    <div className="col-span-2 md:col-span-2 lg:col-span-2 row-span-3">
                       <WeatherCard className="w-full h-full" />
-                    </motion.div>
-                  )
+                    </div>
+                  ),
                 });
 
                 // Feeds
                 let imageIndex = 0;
                 let textIndex = 0;
                 let feedItemIndex = 0;
-                const totalItems = Math.min(visibleCount, feedsWithImages.length + feedsWithoutImages.length);
+                const totalItems = Math.min(
+                  visibleCount,
+                  feedsWithImages.length + feedsWithoutImages.length
+                );
 
-                while (gridItems.length < totalItems + 2 && (imageIndex < feedsWithImages.length || textIndex < feedsWithoutImages.length)) {
+                while (
+                  gridItems.length < totalItems + 2 &&
+                  (imageIndex < feedsWithImages.length || textIndex < feedsWithoutImages.length)
+                ) {
                   if (imageIndex < feedsWithImages.length) {
                     const feed = feedsWithImages[imageIndex];
                     const feedKey = feed.guid || feed.link || `image-${imageIndex}`;
@@ -429,16 +425,10 @@ const FeedPage = () => {
                     gridItems.push({
                       key: `feed-${feedKey}`,
                       component: (
-                        <motion.div
-                          initial={{ y: 10, opacity: 0 }}
-                          whileInView={{ y: 0, opacity: 1 }}
-                          viewport={{ once: true, margin: "-50px" }}
-                          transition={{ duration: 0.25, delay: 0.05 * feedItemIndex, ease: "easeOut" }}
-                          className="group relative col-span-2 md:col-span-2 lg:col-span-2 row-span-3"
-                        >
+                        <div className="group relative col-span-2 md:col-span-2 lg:col-span-2 row-span-3">
                           <FeedCard feed={feed} size="medium" />
-                        </motion.div>
-                      )
+                        </div>
+                      ),
                     });
 
                     imageIndex++;
@@ -452,16 +442,10 @@ const FeedPage = () => {
                     gridItems.push({
                       key: `feed-${feedKey}`,
                       component: (
-                        <motion.div
-                          initial={{ y: 10, opacity: 0 }}
-                          whileInView={{ y: 0, opacity: 1 }}
-                          viewport={{ once: true, margin: "-50px" }}
-                          transition={{ duration: 0.25, delay: 0.05 * feedItemIndex, ease: "easeOut" }}
-                          className="group relative col-span-2 md:col-span-2 lg:col-span-2 row-span-2"
-                        >
+                        <div className="group relative col-span-2 md:col-span-2 lg:col-span-2 row-span-2">
                           <FeedCard feed={feed} size="small" />
-                        </motion.div>
-                      )
+                        </div>
+                      ),
                     });
 
                     textIndex++;
@@ -469,7 +453,7 @@ const FeedPage = () => {
                   }
                 }
 
-                return gridItems.map(item => (
+                return gridItems.map((item) => (
                   <React.Fragment key={item.key}>{item.component}</React.Fragment>
                 ));
               })()}
@@ -478,15 +462,13 @@ const FeedPage = () => {
             {/* Load more */}
             {visibleCount < filteredFeeds.length && (
               <div className="mt-6 flex justify-center">
-                <motion.button
-                  onClick={() => setVisibleCount(c => c + 9)}
-                  className="group relative overflow-hidden rounded-full bg-gradient-to-r from-sky-600 to-indigo-600 px-6 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:shadow-lg"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
+                <button
+                  onClick={() => setVisibleCount((c) => c + 9)}
+                  className="group relative overflow-hidden rounded-full bg-gradient-to-r from-sky-600 to-indigo-600 px-6 py-2.5 text-sm font-medium text-white shadow-md"
                 >
                   <span className="relative z-10">Load more articles</span>
-                  <span className="absolute inset-0 -z-10 bg-gradient-to-r from-indigo-600 to-sky-600 opacity-0 transition-opacity duration-300 group-hover:opacity-100"></span>
-                </motion.button>
+                  <span className="absolute inset-0 -z-10 bg-gradient-to-r from-indigo-600 to-sky-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </button>
               </div>
             )}
           </>
@@ -497,11 +479,13 @@ const FeedPage = () => {
           <div className="grid place-items-center rounded-2xl border border-input bg-card/80 py-16 text-center shadow-sm backdrop-blur">
             <Newspaper className="mb-4 h-16 w-16 text-muted-foreground opacity-50" />
             <h3 className="mb-2 text-xl font-medium text-foreground">No articles found</h3>
-            <p className="mb-6 max-w-md text-muted-foreground">Try adjusting your search terms or selecting a different category</p>
-            <button 
+            <p className="mb-6 max-w-md text-muted-foreground">
+              Try adjusting your search terms or selecting a different category
+            </p>
+            <button
               onClick={() => {
-                setSearchTerm('');
-                setSelectedCategory('zimbabwean');
+                setSearchTerm("");
+                setSelectedCategory("zimbabwean");
               }}
               className="rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
             >
