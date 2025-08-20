@@ -1,43 +1,87 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Building2, TrendingUp, DollarSign, RefreshCw, AlertCircle, Percent, ArrowUpDown } from 'lucide-react';
-import { fetchInflationRates, InflationRatesResponse } from '@/pages/api/rbz-inflation-rates';
-import { fetchRbzExchangeRates, FinalExchangeRateResponse } from '@/pages/api/rbz-exchange-rates';
+import { Building2, RefreshCw, AlertCircle, Percent, ArrowUpDown } from 'lucide-react';
+import { fetchInflationRates, type InflationRatesResponse } from '@/pages/api/rbz-inflation-rates';
+import { fetchRbzExchangeRates, type FinalExchangeRateResponse } from '@/pages/api/rbz-exchange-rates';
 
 interface RBZBankRatesProps {
   className?: string;
 }
 
+// Local, strongly-typed shape used for rendering exchange rows
+type ExchangeRow = {
+  currency: string;
+  bid: number | string | null | undefined;
+  ask: number | string | null | undefined;
+  avg: number | string | null | undefined;
+};
+
 const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
   const [inflationData, setInflationData] = useState<InflationRatesResponse | null>(null);
   const [exchangeData, setExchangeData] = useState<FinalExchangeRateResponse | null>(null);
+  const [normalizedRates, setNormalizedRates] = useState<ExchangeRow[]>([]);
   const [inflationLoading, setInflationLoading] = useState(true);
   const [exchangeLoading, setExchangeLoading] = useState(true);
   const [inflationError, setInflationError] = useState<string | null>(null);
   const [exchangeError, setExchangeError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // ---------- Helpers ----------
+  const formatPercentage = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return 'N/A';
+    return `${value.toFixed(2)}%`;
+  };
+
+  const formatNumber = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return 'N/A';
+    return value.toLocaleString();
+  };
+
+  const formatExchangeValue = (value: number | string | null | undefined) => {
+    if (value === null || value === undefined || value === '') return 'N/A';
+    if (typeof value === 'string') {
+      const n = Number.parseFloat(value);
+      return Number.isFinite(n) ? n.toFixed(4) : value;
+    }
+    return value.toFixed(4);
+  };
+
+  // Normalize whatever the API gives us into { currency, bid, ask, avg } and drop header-like rows
+  const normalizeExchangeRates = (rows: any[]): ExchangeRow[] => {
+    if (!Array.isArray(rows)) return [];
+
+    return rows
+      .filter((r) => {
+        const currency = r?.currency ?? r?.CURRENCY ?? r?.[0];
+        const bid = r?.bid ?? r?.BID ?? r?.buy ?? r?.BUY ?? r?.[1];
+        // remove rows that look like headers
+        if (typeof currency === 'string' && currency.toUpperCase() === 'CURRENCY') return false;
+        if (typeof bid === 'string' && bid.toUpperCase() === 'BID') return false;
+        return true;
+      })
+      .map((r, idx): ExchangeRow => {
+        const currency = r?.currency ?? r?.CURRENCY ?? r?.[0] ?? `CUR-${idx}`;
+        const bid = r?.bid ?? r?.BID ?? r?.buy ?? r?.BUY ?? r?.[1] ?? null;
+        const ask = r?.ask ?? r?.ASK ?? r?.sell ?? r?.SELL ?? r?.[2] ?? null;
+        const avg = r?.avg ?? r?.AVG ?? r?.mid ?? r?.MID ?? r?.[3] ?? null;
+        return { currency: String(currency), bid, ask, avg };
+      });
+  };
+
+  // ---------- Data loaders ----------
   const loadInflationData = async () => {
     setInflationLoading(true);
     setInflationError(null);
-    
     try {
-      console.log('Fetching RBZ Inflation Rates data...');
       const result = await fetchInflationRates();
-      console.log('RBZ Inflation Rates API Result:', result);
-      
       if (result.success && result.data) {
-        console.log('Inflation data:', result.data.inflation_rates);
         setInflationData(result.data);
       } else {
-        const errorMsg = result.error || 'Failed to fetch inflation rates data';
-        console.error('Inflation rates fetch error:', errorMsg);
-        setInflationError(errorMsg);
+        setInflationError(result.error || 'Failed to fetch inflation rates data');
       }
     } catch (err: any) {
-      console.error('Inflation rates fetch exception:', err);
-      setInflationError(err.message || 'An unexpected error occurred');
+      setInflationError(err?.message || 'An unexpected error occurred');
     } finally {
       setInflationLoading(false);
     }
@@ -46,23 +90,18 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
   const loadExchangeData = async () => {
     setExchangeLoading(true);
     setExchangeError(null);
-    
     try {
-      console.log('Fetching RBZ Exchange Rates data...');
       const result = await fetchRbzExchangeRates();
-      console.log('RBZ Exchange Rates API Result:', result);
-      
       if (result.success && result.data) {
-        console.log('Exchange rates data:', result.data.exchange_rates);
         setExchangeData(result.data);
+        setNormalizedRates(normalizeExchangeRates(result.data.exchange_rates));
       } else {
-        const errorMsg = result.error || 'Failed to fetch exchange rates data';
-        console.error('Exchange rates fetch error:', errorMsg);
-        setExchangeError(errorMsg);
+        setExchangeError(result.error || 'Failed to fetch exchange rates data');
+        setNormalizedRates(normalizeExchangeRates(result?.data?.exchange_rates ?? []));
       }
     } catch (err: any) {
-      console.error('Exchange rates fetch exception:', err);
-      setExchangeError(err.message || 'An unexpected error occurred');
+      setExchangeError(err?.message || 'An unexpected error occurred');
+      setNormalizedRates([]);
     } finally {
       setExchangeLoading(false);
     }
@@ -75,32 +114,14 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
 
   useEffect(() => {
     loadAllData();
-    
-    // Auto-refresh every 10 minutes
-    const interval = setInterval(loadAllData, 10 * 60 * 1000);
+    const interval = setInterval(loadAllData, 10 * 60 * 1000); // refresh every 10 min
     return () => clearInterval(interval);
   }, []);
 
-  const formatPercentage = (value: number | null) => {
-    if (value === null || value === undefined) return 'N/A';
-    return `${value.toFixed(2)}%`;
-  };
-
-  const formatNumber = (value: number | null) => {
-    if (value === null || value === undefined) return 'N/A';
-    return value.toLocaleString();
-  };
-
-  const formatExchangeValue = (value: number | string) => {
-    if (value === null || value === undefined || value === '') return 'N/A';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number') return value.toFixed(4);
-    return String(value);
-  };
-
   const isLoading = inflationLoading || exchangeLoading;
-  const hasErrors = inflationError || exchangeError;
+  const hasErrors = Boolean(inflationError || exchangeError);
 
+  // ---------- Render ----------
   if (isLoading) {
     return (
       <div className={`bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6 ${className}`}>
@@ -167,15 +188,21 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                 <div className="bg-gray-700/30 rounded-lg p-3">
                   <div className="text-xs text-gray-400 mb-1">CPI Index</div>
-                  <div className="text-xl font-bold text-white">{formatNumber(inflationData.inflation_rates.cpi_index)}</div>
+                  <div className="text-xl font-bold text-white">
+                    {formatNumber(inflationData.inflation_rates.cpi_index)}
+                  </div>
                 </div>
                 <div className="bg-gray-700/30 rounded-lg p-3">
                   <div className="text-xs text-gray-400 mb-1">MoM Change</div>
-                  <div className="text-xl font-bold text-white">{formatPercentage(inflationData.inflation_rates.mom_change)}</div>
+                  <div className="text-xl font-bold text-white">
+                    {formatPercentage(inflationData.inflation_rates.mom_change)}
+                  </div>
                 </div>
                 <div className="bg-gray-700/30 rounded-lg p-3">
                   <div className="text-xs text-gray-400 mb-1">YoY Change</div>
-                  <div className="text-xl font-bold text-white">{formatPercentage(inflationData.inflation_rates.yoy_change)}</div>
+                  <div className="text-xl font-bold text-white">
+                    {formatPercentage(inflationData.inflation_rates.yoy_change)}
+                  </div>
                 </div>
               </div>
               
@@ -191,13 +218,21 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                   <tbody>
                     <tr className="border-b border-gray-700/50">
                       <td className="py-3 px-3 text-white">Food</td>
-                      <td className="text-right py-3 px-3 text-white">{formatPercentage(inflationData.inflation_rates.food_mom)}</td>
-                      <td className="text-right py-3 px-3 text-white">{formatPercentage(inflationData.inflation_rates.food_yoy)}</td>
+                      <td className="text-right py-3 px-3 text-white">
+                        {formatPercentage(inflationData.inflation_rates.food_mom)}
+                      </td>
+                      <td className="text-right py-3 px-3 text-white">
+                        {formatPercentage(inflationData.inflation_rates.food_yoy)}
+                      </td>
                     </tr>
                     <tr className="border-b border-gray-700/50">
                       <td className="py-3 px-3 text-white">Non-Food</td>
-                      <td className="text-right py-3 px-3 text-white">{formatPercentage(inflationData.inflation_rates.non_food_mom)}</td>
-                      <td className="text-right py-3 px-3 text-white">{formatPercentage(inflationData.inflation_rates.non_food_yoy)}</td>
+                      <td className="text-right py-3 px-3 text-white">
+                        {formatPercentage(inflationData.inflation_rates.non_food_mom)}
+                      </td>
+                      <td className="text-right py-3 px-3 text-white">
+                        {formatPercentage(inflationData.inflation_rates.non_food_yoy)}
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -227,7 +262,7 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                 </div>
               </div>
             </div>
-          ) : !exchangeData || !exchangeData.exchange_rates.length ? (
+          ) : normalizedRates.length === 0 ? (
             <div className="text-center py-4">
               <div className="text-gray-400 text-sm">No exchange rates data available</div>
             </div>
@@ -244,33 +279,29 @@ const RBZBankRates: React.FC<RBZBankRatesProps> = ({ className = '' }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {exchangeData.exchange_rates
-                      .filter((rate, index) => index !== 0) // Skip the first row which is the header
-                      .map((rate, index) => (
-                        <tr 
-                          key={`${rate.currency}-${index}`} 
-                          className="border-b border-gray-700/50 hover:bg-gray-700/20 transition-colors"
-                        >
-                          <td className="py-3 px-3 text-white">
-                            {rate.currency}
-                          </td>
-                          <td className="text-right py-3 px-3 text-white">
-                            {formatExchangeValue(rate.bid)}
-                          </td>
-                          <td className="text-right py-3 px-3 text-white">
-                            {formatExchangeValue(rate.ask)}
-                          </td>
-                          <td className="text-right py-3 px-3 text-white">
-                            {formatExchangeValue(rate.avg)}
-                          </td>
-                        </tr>
-                      ))}
+                    {normalizedRates.map((rate, index) => (
+                      <tr
+                        key={`${rate.currency}-${index}`}
+                        className="border-b border-gray-700/50 hover:bg-gray-700/20 transition-colors"
+                      >
+                        <td className="py-3 px-3 text-white">{rate.currency}</td>
+                        <td className="text-right py-3 px-3 text-white">
+                          {formatExchangeValue(rate.bid)}
+                        </td>
+                        <td className="text-right py-3 px-3 text-white">
+                          {formatExchangeValue(rate.ask)}
+                        </td>
+                        <td className="text-right py-3 px-3 text-white">
+                          {formatExchangeValue(rate.avg)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
               
               <div className="mt-3 text-xs text-gray-500">
-                Date: {exchangeData.date} • Source: {exchangeData.source}
+                Date: {exchangeData?.date ?? 'N/A'} • Source: {exchangeData?.source ?? 'N/A'}
               </div>
             </div>
           )}
