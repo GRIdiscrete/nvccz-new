@@ -1,4 +1,4 @@
-export const API_BASE_URL = "https://f5d871c73dbb.ngrok-free.app";
+export const API_BASE_URL = "https://31358b749b00.ngrok-free.app";
 
 export const sampleExchangeData = {
    "status": "success",
