@@ -21,6 +21,7 @@ import {
   CalendarDays,
   Gauge,
   PanelsTopLeft,
+  Bot,
 } from "lucide-react";
 
 export default function Home() {
@@ -124,6 +125,15 @@ export default function Home() {
                     Live Exchange Rates{" "}
                     <span className="text-slate-400">(RBZ Official Rates)</span>
                   </h2>
+                  {/* Intelligent chatbot link */}
+                  <a
+                    href="https://nvccz-chat.vercel.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200"
+                  >
+                    <Bot size={14} /> Ask Arcus AI
+                  </a>
                 </div>
                 <TickerStrip className="rounded-lg shadow-sm" />
               </div>
@@ -153,13 +163,6 @@ export default function Home() {
                           isTabsSticky ? { transform: "translateZ(0)" } : undefined
                         }
                       >
-                        {/*
-                          MODERN, MINIMAL TAB TRIGGERS
-                          - Subtle glass card container
-                          - Ghost/soft-selected pills
-                          - Reduced contrast for inactive icons/labels
-                          - Smooth hover without heavy shadows/gradients
-                        */}
                         <TabsList
                           ref={tabsRef}
                           className="mb-6 flex w-full items-center gap-1 rounded-2xl border border-slate-200 bg-white/60 px-1.5 py-1 backdrop-blur supports-[backdrop-filter]:bg-white/50 overflow-x-auto whitespace-nowrap no-scrollbar"
@@ -172,12 +175,8 @@ export default function Home() {
                               title={label}
                               className="group relative inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3 md:px-3.5 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 data-[state=active]:text-slate-900 transition-colors"
                             >
-                              {/* Soft pill background (hover/active) */}
                               <span className="absolute inset-0 rounded-xl bg-slate-100/70 opacity-0 transition-opacity duration-200 group-hover:opacity-100 data-[state=active]:opacity-100" />
-
-                              {/* Thin hairline ring to define pills; intensifies when active */}
                               <span className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-slate-200 data-[state=active]:ring-slate-300" />
-
                               <span className="relative z-10 inline-flex items-center gap-2 min-w-0">
                                 <Icon className="size-4 flex-none opacity-70 group-hover:opacity-100 data-[state=active]:opacity-100" />
                                 <span className="truncate max-w-[6rem] xs:inline sm:inline md:inline">
@@ -190,7 +189,6 @@ export default function Home() {
                       </div>
 
                       <div className="relative min-h-[300px] w-full rounded-xl border border-blue-200 p-0 shadow-xl bg-white backdrop-blur">
-                        {/* subtle top border glow under sticky tabs */}
                         <div className="pointer-events-none absolute -top-px left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-300/60 to-transparent" />
                         <div className="p-6">
                           <TabsDemo />
