@@ -1,11 +1,11 @@
-"use client"; // ✨ required to use hooks & next/navigation in app router
+'use client';
 
-import { useState, useEffect } from "react";
-import { FiCalendar, FiPlus, FiX, FiDollarSign, FiUser, FiTrash2 } from "react-icons/fi";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from 'react';
+import { FiCalendar, FiPlus, FiX, FiDollarSign, FiUser, FiTrash2, FiCreditCard } from 'react-icons/fi';
+import { useRouter } from 'next/navigation';
 
 // Type definitions
-type Customer = {
+ type Customer = {
   id: string;
   name: string;
   taxNumber: string;
@@ -19,7 +19,7 @@ type Customer = {
   updatedAt: string;
 };
 
-type Currency = {
+ type Currency = {
   id: string;
   code: string;
   name: string;
@@ -30,13 +30,15 @@ type Currency = {
   updatedAt: string;
 };
 
-type InvoiceItem = {
+ type InvoiceItem = {
   description: string;
   amount: number;
   category: string;
 };
 
-type InvoiceFormData = {
+ type PaymentMethod = 'BANK' | 'CASH' | 'CREDIT';
+
+ type InvoiceFormData = {
   customerId: string;
   amount: string;
   currencyId: string;
@@ -44,12 +46,14 @@ type InvoiceFormData = {
   description: string;
   isTaxable: boolean;
   items: InvoiceItem[];
+  // NEW: payment method captured from dropdown
+  paymentMethod: PaymentMethod | '';
 };
 
-const formatCurrency = (amount: number, currencyCode: string = "USD") => {
+const formatCurrency = (amount: number, currencyCode: string = 'USD') => {
   try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
       currency: currencyCode,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -67,36 +71,37 @@ const CreateInvoice = () => {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState<InvoiceFormData>({
-    customerId: "",
-    amount: "",
-    currencyId: "",
-    transactionDate: new Date().toISOString().split("T")[0],
-    description: "",
+    customerId: '',
+    amount: '',
+    currencyId: '',
+    transactionDate: new Date().toISOString().split('T')[0],
+    description: '',
     isTaxable: true,
     items: [
       {
-        description: "",
+        description: '',
         amount: 0,
-        category: "",
+        category: '',
       },
     ],
+    paymentMethod: '', // force explicit selection
   });
 
   // Fetch customers and currencies
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const token = sessionStorage.getItem("token");
+      const token = sessionStorage.getItem('token');
 
       try {
         // Customers
         const customersResponse = await fetch(
-          "https://nvccz-pi.vercel.app/api/accounting/customers",
+          'https://nvccz-pi.vercel.app/api/accounting/customers',
           {
             headers: { Authorization: `Bearer ${token}` },
-          }
+          },
         );
-        if (!customersResponse.ok) throw new Error("Failed to fetch customers");
+        if (!customersResponse.ok) throw new Error('Failed to fetch customers');
         const customersData = await customersResponse.json();
         if (
           customersData.success &&
@@ -108,19 +113,19 @@ const CreateInvoice = () => {
 
         // Currencies
         const currenciesRes = await fetch(
-          "https://nvccz-pi.vercel.app/api/accounting/currencies",
+          'https://nvccz-pi.vercel.app/api/accounting/currencies',
           {
             headers: { Authorization: `Bearer ${token}` },
-          }
+          },
         );
         if (currenciesRes.ok) {
           const currenciesData = await currenciesRes.json();
           const activeCurrencies = currenciesData.data.filter(
-            (c: Currency) => c.isActive
+            (c: Currency) => c.isActive,
           );
           setCurrencies(activeCurrencies || []);
           const defaultCurrency = activeCurrencies.find(
-            (c: Currency) => c.isDefault
+            (c: Currency) => c.isDefault,
           );
           if (defaultCurrency) {
             setFormData((prev) => ({
@@ -130,7 +135,7 @@ const CreateInvoice = () => {
           }
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error('Error fetching data:', error);
       } finally {
         setIsLoading(false);
       }
@@ -142,32 +147,32 @@ const CreateInvoice = () => {
   const handleInputChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
+    >,
   ) => {
     const { name, value, type } = e.target as HTMLInputElement;
 
     // Special "create client" option
-    if (name === "customerId" && value === "__create__") {
-      router.push("/ERP/Tools/Clients");
+    if (name === 'customerId' && value === '__create__') {
+      router.push('/ERP/Tools/Clients');
       return;
     }
 
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? (e.target as HTMLInputElement).checked : value,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
     }));
   };
 
   const handleItemChange = (
     index: number,
     field: keyof InvoiceItem,
-    value: string | number
+    value: string | number,
   ) => {
     const newItems = [...formData.items];
     newItems[index] = {
       ...newItems[index],
-      [field]: field === "amount" ? Number(value) : value,
-    };
+      [field]: field === 'amount' ? Number(value) : value,
+    } as InvoiceItem;
     setFormData((prev) => ({
       ...prev,
       items: newItems,
@@ -180,7 +185,7 @@ const CreateInvoice = () => {
   const addItem = () => {
     setFormData((prev) => ({
       ...prev,
-      items: [...prev.items, { description: "", amount: 0, category: "" }],
+      items: [...prev.items, { description: '', amount: 0, category: '' }],
     }));
   };
 
@@ -199,16 +204,16 @@ const CreateInvoice = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const token = sessionStorage.getItem("token");
+    const token = sessionStorage.getItem('token');
 
     try {
       const response = await fetch(
-        "https://nvccz-pi.vercel.app/api/accounting/invoices",
+        'https://nvccz-pi.vercel.app/api/accounting/invoices',
         {
-          method: "POST",
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             ...formData,
@@ -217,40 +222,43 @@ const CreateInvoice = () => {
               ...item,
               amount: Number(item.amount),
             })),
+            // ensure uppercase as required by API contract
+            paymentMethod: (formData.paymentMethod || '').toUpperCase(),
           }),
-        }
+        },
       );
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
-          errorData.message || `HTTP error! status: ${response.status}`
+          errorData.message || `HTTP error! status: ${response.status}`,
         );
       }
 
       const data = await response.json();
       if (data.success) {
         setFormData({
-          customerId: "",
-          amount: "",
-          currencyId: currencies.find((c) => c.isDefault)?.id || "",
-          transactionDate: new Date().toISOString().split("T")[0],
-          description: "",
+          customerId: '',
+          amount: '',
+          currencyId: currencies.find((c) => c.isDefault)?.id || '',
+          transactionDate: new Date().toISOString().split('T')[0],
+          description: '',
           isTaxable: true,
-          items: [{ description: "", amount: 0, category: "" }],
+          items: [{ description: '', amount: 0, category: '' }],
+          paymentMethod: '',
         });
       }
     } catch (error) {
-      console.error("Error creating invoice:", error);
+      console.error('Error creating invoice:', error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const currencyCode = formData.currencyId
-    ? currencies.find((c) => c.id === formData.currencyId)?.code || "USD"
-    : "USD";
-  const subtotal = parseFloat(formData.amount || "0") || 0;
+    ? currencies.find((c) => c.id === formData.currencyId)?.code || 'USD'
+    : 'USD';
+  const subtotal = parseFloat(formData.amount || '0') || 0;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -274,7 +282,7 @@ const CreateInvoice = () => {
             className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg hover:from-blue-700 hover:to-blue-900 transition-colors shadow-md flex items-center"
             disabled={isLoading}
           >
-            {isSubmitting ? "Saving..." : "Save Invoice"}
+            {isSubmitting ? 'Saving...' : 'Save Invoice'}
           </button>
         </div>
       </div>
@@ -308,7 +316,7 @@ const CreateInvoice = () => {
                     disabled={isLoading}
                   >
                     <option value="">
-                      {isLoading ? "Loading clients..." : "Select a client"}
+                      {isLoading ? 'Loading clients...' : 'Select a client'}
                     </option>
                     {customers.map((customer) => (
                       <option key={customer.id} value={customer.id}>
@@ -358,7 +366,7 @@ const CreateInvoice = () => {
                     disabled={isLoading}
                   >
                     <option value="">
-                      {isLoading ? "Loading currencies..." : "Select currency"}
+                      {isLoading ? 'Loading currencies...' : 'Select currency'}
                     </option>
                     {currencies.map((currency) => (
                       <option key={currency.id} value={currency.id}>
@@ -366,6 +374,34 @@ const CreateInvoice = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Method
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FiCreditCard className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <select
+                    name="paymentMethod"
+                    value={formData.paymentMethod}
+                    onChange={handleInputChange}
+                    required
+                    className="block w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                    disabled={isLoading}
+                  >
+                    <option value="">Select method</option>
+                    <option value="BANK">Bank</option>
+                    <option value="CASH">Cash</option>
+                    <option value="CREDIT">Credit</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Sent to the API as upper-case (e.g., “BANK”).
+                  </p>
                 </div>
               </div>
 
@@ -382,13 +418,13 @@ const CreateInvoice = () => {
                     setFormData((p) => ({ ...p, isTaxable: !p.isTaxable }))
                   }
                   className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                    formData.isTaxable ? "bg-blue-600" : "bg-gray-200"
+                    formData.isTaxable ? 'bg-blue-600' : 'bg-gray-200'
                   }`}
                 >
                   <span
                     aria-hidden="true"
                     className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
-                      formData.isTaxable ? "translate-x-5" : "translate-x-0"
+                      formData.isTaxable ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />
                 </button>
@@ -439,7 +475,7 @@ const CreateInvoice = () => {
                       type="text"
                       value={item.description}
                       onChange={(e) =>
-                        handleItemChange(index, "description", e.target.value)
+                        handleItemChange(index, 'description', e.target.value)
                       }
                       required
                       className="block w-full px-3 py-2 border border-gray-200 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
@@ -454,7 +490,7 @@ const CreateInvoice = () => {
                       type="text"
                       value={item.category}
                       onChange={(e) =>
-                        handleItemChange(index, "category", e.target.value)
+                        handleItemChange(index, 'category', e.target.value)
                       }
                       className="block w-full px-3 py-2 border border-gray-200 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                       placeholder="e.g. Consulting"
@@ -470,9 +506,9 @@ const CreateInvoice = () => {
                       </div>
                       <input
                         type="number"
-                        value={item.amount || ""}
+                        value={item.amount || ''}
                         onChange={(e) =>
-                          handleItemChange(index, "amount", e.target.value)
+                          handleItemChange(index, 'amount', e.target.value)
                         }
                         required
                         min="0"

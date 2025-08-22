@@ -1,22 +1,25 @@
 'use client'
-import { useState, useEffect } from 'react';
-import { 
-  FiCalendar, 
-  FiRefreshCw, 
-  FiChevronLeft, 
-  FiChevronRight, 
-  FiLoader, 
-  FiCheck, 
-  FiArrowLeft, 
-  FiSearch, 
-  FiFilter, 
-  FiX, 
-  FiDownload
+import { useState, useEffect, useMemo } from 'react';
+import {
+  FiCalendar,
+  FiRefreshCw,
+  FiChevronLeft,
+  FiChevronRight,
+  FiLoader,
+  FiCheck,
+  FiArrowLeft,
+  FiSearch,
+  FiFilter,
+  FiX,
+  FiDownload,
+  FiDollarSign,
+  FiAlertTriangle, // ← NEW
 } from 'react-icons/fi';
 import ERP from '../../page';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 
+// ---------------- Types ----------------
 type Currency = {
   id: string;
   code: string;
@@ -52,8 +55,8 @@ type JournalEntryLine = {
   id: string;
   journalEntryId: string;
   chartOfAccountId: string;
-  debitAmount: string;
-  creditAmount: string;
+  debitAmount: string; // API sends strings
+  creditAmount: string; // API sends strings
   description: string;
   vatAmount: string;
   createdAt: string;
@@ -82,6 +85,58 @@ type ApiResponse = {
   data: JournalEntry[];
 };
 
+// --------------- Helpers ---------------
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const formatDate = (dateString: string) => {
+  try {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return 'Invalid date';
+  }
+};
+
+const formatCurrency = (amount: string, currencyCode: string) => {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+    }).format(parseFloat(amount));
+  } catch {
+    return amount;
+  }
+};
+
+const formatMoney = (amount: number, currencyCode: string) => {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return amount.toFixed(2);
+  }
+};
+
+// NEW: helper to determine if a journal entry is balanced
+const isEntryBalanced = (entry: JournalEntry) => {
+  let debit = 0;
+  let credit = 0;
+  for (const line of entry.journalEntryLines || []) {
+    debit += parseFloat(line.debitAmount || '0') || 0;
+    credit += parseFloat(line.creditAmount || '0') || 0;
+  }
+  const diff = round2(debit - credit);
+  return Math.abs(diff) < 0.01;
+};
+
+// --------------- Component ---------------
 const GeneralLedger = () => {
   const [exporting, setExporting] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -93,42 +148,77 @@ const GeneralLedger = () => {
   const [postingId, setPostingId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filter states
-  const [searchTerm, setSearchTerm] = useState('');
-  const [dateRange, setDateRange] = useState({
-    start: '',
-    end: ''
-  });
-  const [accountFilter, setAccountFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  // NEW: map of unbalanced entry ids (for quick lookups & styling)
+  const unbalancedEntryIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const entry of journalEntries) {
+      if (!isEntryBalanced(entry)) set.add(entry.id);
+    }
+    return set;
+  }, [journalEntries]);
 
+  // NEW: Trial Balance (summary across current filter)
+  const totalsByCurrency = useMemo(() => {
+    const map: Record<string, { debit: number; credit: number }> = {};
+    for (const entry of filteredEntries) {
+      const code = entry.currency?.code || 'USD';
+      if (!map[code]) map[code] = { debit: 0, credit: 0 };
+      for (const line of entry.journalEntryLines || []) {
+        map[code].debit += parseFloat(line.debitAmount || '0') || 0;
+        map[code].credit += parseFloat(line.creditAmount || '0') || 0;
+      }
+      map[code].debit = round2(map[code].debit);
+      map[code].credit = round2(map[code].credit);
+    }
+    return map;
+  }, [filteredEntries]);
+
+  const currencyOptions = useMemo(() => Object.keys(totalsByCurrency), [totalsByCurrency]);
+
+  const dominantCurrency = useMemo(() => {
+    let best = 'USD';
+    let bestVal = -1;
+    for (const code of Object.keys(totalsByCurrency)) {
+      const t = totalsByCurrency[code];
+      const val = (t?.debit || 0) + (t?.credit || 0);
+      if (val > bestVal) {
+        best = code;
+        bestVal = val;
+      }
+    }
+    return best;
+  }, [totalsByCurrency]);
+
+  const [summaryCurrency, setSummaryCurrency] = useState<string>('');
+  useEffect(() => {
+    // initialize or recover if current currency disappeared due to filters
+    if (!summaryCurrency || !totalsByCurrency[summaryCurrency]) {
+      setSummaryCurrency(dominantCurrency || currencyOptions[0] || 'USD');
+    }
+  }, [summaryCurrency, dominantCurrency, currencyOptions, totalsByCurrency]);
+
+  const selectedTotals = totalsByCurrency[summaryCurrency] || { debit: 0, credit: 0 };
+  const tbDifference = round2(selectedTotals.debit - selectedTotals.credit);
+  const isBalancedTB = Math.abs(tbDifference) < 0.01;
+
+  // -------- Fetch data --------
   useEffect(() => {
     const fetchGeneralLedger = async () => {
       try {
         setLoading(true);
-        
         const token = sessionStorage.getItem('token');
-        if (!token) {
-          throw new Error('No authentication token found');
-        }
-        console.log(token);
+        if (!token) throw new Error('No authentication token found');
 
         const response = await fetch('https://nvccz-pi.vercel.app/api/accounting/journal-entries', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const data: ApiResponse = await response.json();
         if (data.success && data.data) {
           setJournalEntries(data.data);
           setFilteredEntries(data.data);
-          const totalLines = data.data.reduce((sum, entry) => 
-            sum + (entry.journalEntryLines?.length || 0), 0);
+          const totalLines = data.data.reduce((sum, entry) => sum + (entry.journalEntryLines?.length || 0), 0);
           setTotalEntries(totalLines);
         }
       } catch (error) {
@@ -141,81 +231,78 @@ const GeneralLedger = () => {
     fetchGeneralLedger();
   }, []);
 
-
+  // -------- Filters --------
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [accountFilter, setAccountFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [unbalancedOnly, setUnbalancedOnly] = useState(false); // ← NEW
 
   useEffect(() => {
-    const filtered = journalEntries.filter(entry => {
-      // Search term filter
-      const matchesSearch = 
+    const filtered = journalEntries.filter((entry) => {
+      // Search term
+      const matchesSearch =
         !searchTerm ||
         entry.referenceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         entry.description?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Date range filter
+      // Date range
       const entryDate = new Date(entry.transactionDate);
-      const matchesDateRange = 
+      const matchesDateRange =
         (!dateRange.start || new Date(dateRange.start) <= entryDate) &&
         (!dateRange.end || new Date(dateRange.end) >= entryDate);
 
       // Account filter
-      const matchesAccount = 
+      const matchesAccount =
         !accountFilter ||
-        entry.journalEntryLines?.some(line => 
-          `${line.chartOfAccount?.accountNo} - ${line.chartOfAccount?.accountName}` === accountFilter
+        entry.journalEntryLines?.some(
+          (line) => `${line.chartOfAccount?.accountNo} - ${line.chartOfAccount?.accountName}` === accountFilter,
         );
 
       // Status filter
-      const matchesStatus = 
-        !statusFilter ||
-        entry.status === statusFilter;
+      const matchesStatus = !statusFilter || entry.status === statusFilter;
 
-      return matchesSearch && matchesDateRange && matchesAccount && matchesStatus;
+      // NEW: Unbalanced filter
+      const matchesUnbalanced = !unbalancedOnly || unbalancedEntryIds.has(entry.id);
+
+      return matchesSearch && matchesDateRange && matchesAccount && matchesStatus && matchesUnbalanced;
     });
 
     setFilteredEntries(filtered);
     setCurrentPage(1);
-    const totalLines = filtered.reduce((sum, entry) => 
-      sum + (entry.journalEntryLines?.length || 0), 0);
+    const totalLines = filtered.reduce((sum, entry) => sum + (entry.journalEntryLines?.length || 0), 0);
     setTotalEntries(totalLines);
-  }, [journalEntries, searchTerm, dateRange, accountFilter, statusFilter]);
+  }, [journalEntries, searchTerm, dateRange, accountFilter, statusFilter, unbalancedOnly, unbalancedEntryIds]);
 
+  // -------- Actions --------
   const postJournalEntry = async (id: string) => {
     try {
       setPostingId(id);
       const token = sessionStorage.getItem('token');
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-  
+      if (!token) throw new Error('No authentication token found');
+
       const response = await fetch(`https://nvccz-pi.vercel.app/api/accounting/journal-entries/${id}/post`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: 'POSTED' })
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'POSTED' }),
       });
-  
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to post journal entry');
       }
-  
+
       const data = await response.json();
       if (data.success) {
         const refreshResponse = await fetch('https://nvccz-pi.vercel.app/api/accounting/journal-entries', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
-        
         if (refreshResponse.ok) {
           const refreshData: ApiResponse = await refreshResponse.json();
           if (refreshData.success && refreshData.data) {
             setJournalEntries(refreshData.data);
             setFilteredEntries(refreshData.data);
-            const totalLines = refreshData.data.reduce((sum, entry) => 
-              sum + (entry.journalEntryLines?.length || 0), 0);
+            const totalLines = refreshData.data.reduce((sum, entry) => sum + (entry.journalEntryLines?.length || 0), 0);
             setTotalEntries(totalLines);
           }
         }
@@ -227,39 +314,47 @@ const GeneralLedger = () => {
     }
   };
 
+  const handlePostClick = async (id: string, currentStatus: string) => {
+    if (currentStatus === 'POSTED') return;
+    if (confirm('Are you sure you want to post this journal entry? This action cannot be undone.')) {
+      await postJournalEntry(id);
+    }
+  };
+
+  // -------- Export (detail) --------
+  const getFlattenedEntries = () =>
+    filteredEntries.flatMap((entry) => entry.journalEntryLines?.map((line) => ({ entry, line })) || []);
+
+  const flattenedEntries = getFlattenedEntries();
   const exportToExcel = () => {
     setExporting(true);
     try {
-      // Prepare the data for export
       const dataToExport = flattenedEntries.map(({ entry, line }) => {
-        const account = getAccountInfo(line);
+        const account = {
+          name: line.chartOfAccount?.accountName || 'Unknown Account',
+          code: line.chartOfAccount?.accountNo || 'N/A',
+          type: line.chartOfAccount?.accountType || 'Unknown',
+        };
         return {
-          'Date': formatDate(entry.transactionDate),
-          'Reference': entry.referenceNumber || 'N/A',
-          'Description': line.description || entry.description || 'No description',
+          Date: formatDate(entry.transactionDate),
+          Reference: entry.referenceNumber || 'N/A',
+          Description: line.description || entry.description || 'No description',
           'Account Code': account.code,
           'Account Name': account.name,
           'Account Type': account.type,
-          'Debit': line.debitAmount !== "0" ? parseFloat(line.debitAmount) : 0,
-          'Credit': line.creditAmount !== "0" ? parseFloat(line.creditAmount) : 0,
-          'Status': entry.status,
-          'Currency': entry.currency?.code || 'USD',
+          Debit: line.debitAmount !== '0' ? parseFloat(line.debitAmount) : 0,
+          Credit: line.creditAmount !== '0' ? parseFloat(line.creditAmount) : 0,
+          Status: entry.status,
+          Currency: entry.currency?.code || 'USD',
           'Created By': `${entry.createdBy?.firstName} ${entry.createdBy?.lastName}`,
-          'Created At': formatDate(entry.createdAt)
+          'Created At': formatDate(entry.createdAt),
         };
       });
 
-      // Create workbook and worksheet
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(dataToExport);
-      
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(wb, ws, "General Ledger");
-      
-      // Generate file name with current date
+      XLSX.utils.book_append_sheet(wb, ws, 'General Ledger');
       const fileName = `General_Ledger_${new Date().toISOString().split('T')[0]}.xlsx`;
-      
-      // Export the file
       XLSX.writeFile(wb, fileName);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
@@ -268,56 +363,12 @@ const GeneralLedger = () => {
       setExporting(false);
     }
   };
-  
-  const handlePostClick = async (id: string, currentStatus: string) => {
-    if (currentStatus === 'POSTED') return;
-    
-    if (confirm('Are you sure you want to post this journal entry? This action cannot be undone.')) {
-      await postJournalEntry(id);
-    }
-  };
 
-  const getFlattenedEntries = () => {
-    return filteredEntries.flatMap(entry => 
-      entry.journalEntryLines?.map(line => ({ entry, line })) || []);
-  };
-
-  const flattenedEntries = getFlattenedEntries();
+  // -------- Pagination --------
   const indexOfLastEntry = currentPage * entriesPerPage;
   const indexOfFirstEntry = indexOfLastEntry - entriesPerPage;
   const currentEntries = flattenedEntries.slice(indexOfFirstEntry, indexOfLastEntry);
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
-
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } catch {
-      return 'Invalid date';
-    }
-  };
-
-  const formatCurrency = (amount: string, currencyCode: string) => {
-    try {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currencyCode
-      }).format(parseFloat(amount));
-    } catch {
-      return amount;
-    }
-  };
-
-  const getAccountInfo = (line: JournalEntryLine) => {
-    return {
-      name: line.chartOfAccount?.accountName || 'Unknown Account',
-      code: line.chartOfAccount?.accountNo || 'N/A',
-      type: line.chartOfAccount?.accountType || 'Unknown'
-    };
-  };
 
   const getStatusBadge = (status: string) => {
     const statusClasses = {
@@ -325,35 +376,29 @@ const GeneralLedger = () => {
       PENDING: 'bg-amber-100 text-amber-800',
       DRAFT: 'bg-blue-100 text-blue-800',
       CANCELLED: 'bg-red-100 text-red-800',
-      default: 'bg-gray-100 text-gray-800'
-    };
+      default: 'bg-gray-100 text-gray-800',
+    } as const;
 
-    const className = statusClasses[status as keyof typeof statusClasses] || statusClasses.default;
-    
-    return (
-      <span className={`px-2 py-1 text-xs rounded-full font-light ${className}`}>
-        {status || 'UNKNOWN'}
-      </span>
-    );
+    const className = (statusClasses as any)[status] || statusClasses.default;
+    return <span className={`px-2 py-1 text-xs rounded-full font-light ${className}`}>{status || 'UNKNOWN'}</span>;
   };
 
-  const allAccounts = Array.from(new Set(
-    journalEntries.flatMap(entry => 
-      entry.journalEntryLines?.map(line => 
-        `${line.chartOfAccount?.accountNo} - ${line.chartOfAccount?.accountName}`
-      ) || []
-    )
-  )).filter(Boolean) as string[];
+  const allAccounts = Array.from(
+    new Set(
+      journalEntries.flatMap(
+        (entry) => entry.journalEntryLines?.map((line) => `${line.chartOfAccount?.accountNo} - ${line.chartOfAccount?.accountName}`) || [],
+      ),
+    ),
+  ).filter(Boolean) as string[];
 
-  const allStatuses = Array.from(new Set(
-    journalEntries.map(entry => entry.status)
-  )).filter(Boolean) as string[];
+  const allStatuses = Array.from(new Set(journalEntries.map((entry) => entry.status))).filter(Boolean) as string[];
 
   const clearFilters = () => {
     setSearchTerm('');
     setDateRange({ start: '', end: '' });
     setAccountFilter('');
     setStatusFilter('');
+    setUnbalancedOnly(false); // ← reset
   };
 
   return (
@@ -361,8 +406,8 @@ const GeneralLedger = () => {
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center space-x-4">
-            <Link 
-              href="/ERP/Reports" 
+            <Link
+              href="/ERP/Reports"
               className="group relative flex items-center px-3 py-2 rounded-lg transition-all duration-300 hover:bg-navy-50/50"
             >
               <div className="absolute inset-0 rounded-lg bg-navy-100/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -377,14 +422,14 @@ const GeneralLedger = () => {
               <p className="text-gray-500 font-light">Complete transaction history with debit/credit balances</p>
             </div>
           </div>
-          <button 
+          <button
             className="flex items-center px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
             onClick={() => window.location.reload()}
           >
             <FiRefreshCw className="mr-2" />
             Refresh
           </button>
-          <button 
+          <button
             className={`flex items-center px-4 py-2 rounded-lg transition-all duration-300 shadow-sm ${
               exporting || flattenedEntries.length === 0
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
@@ -400,23 +445,23 @@ const GeneralLedger = () => {
               </>
             ) : (
               <>
-                <svg 
-                  className="w-5 h-5 mr-2" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
+                <svg
+                  className="w-5 h-5 mr-2"
+                  viewBox="0 0 24 24"
+                  fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  <path 
-                    d="M20 15V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V15" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
+                  <path
+                    d="M20 15V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V15"
+                    stroke="currentColor"
+                    strokeWidth="2"
                     strokeLinecap="round"
                   />
-                  <path 
-                    d="M12 4V16M12 16L8 12M12 16L16 12" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    strokeLinecap="round" 
+                  <path
+                    d="M12 4V16M12 16L8 12M12 16L16 12"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                 </svg>
@@ -441,8 +486,8 @@ const GeneralLedger = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            
-            <button 
+
+            <button
               onClick={() => setShowFilters(!showFilters)}
               className="flex items-center px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
             >
@@ -452,7 +497,7 @@ const GeneralLedger = () => {
           </div>
 
           {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200/50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="mt-4 pt-4 border-t border-gray-200/50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm font-light text-gray-700 mb-1">Date Range</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -460,13 +505,13 @@ const GeneralLedger = () => {
                     type="date"
                     className="border border-gray-300 rounded-lg px-3 py-2 w-full"
                     value={dateRange.start}
-                    onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
                   />
                   <input
                     type="date"
                     className="border border-gray-300 rounded-lg px-3 py-2 w-full"
                     value={dateRange.end}
-                    onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                   />
                 </div>
               </div>
@@ -479,8 +524,10 @@ const GeneralLedger = () => {
                   onChange={(e) => setAccountFilter(e.target.value)}
                 >
                   <option value="">All Accounts</option>
-                  {allAccounts.map(account => (
-                    <option key={account} value={account}>{account}</option>
+                  {allAccounts.map((account) => (
+                    <option key={account} value={account}>
+                      {account}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -493,10 +540,29 @@ const GeneralLedger = () => {
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
                   <option value="">All Statuses</option>
-                  {allStatuses.map(status => (
-                    <option key={status} value={status}>{status}</option>
+                  {allStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
                   ))}
                 </select>
+              </div>
+
+              {/* NEW: Unbalanced-only filter */}
+              <div>
+                <label className="block text-sm font-light text-gray-700 mb-1">Balance</label>
+                <label className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={unbalancedOnly}
+                    onChange={(e) => setUnbalancedOnly(e.target.checked)}
+                  />
+                  <span className="flex items-center gap-2 text-sm text-gray-700">
+                    <FiAlertTriangle className="text-red-500" />
+                    Show only unbalanced transactions
+                  </span>
+                </label>
               </div>
 
               <div className="flex items-end">
@@ -510,6 +576,72 @@ const GeneralLedger = () => {
               </div>
             </div>
           )}
+        </div>
+
+        {/* ---------------- Trial Balance Summary Card (for current filters) ---------------- */}
+        <div className="mb-6">
+          <div className="bg-white rounded-xl border border-gray-200/60 shadow-sm">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-50 text-blue-700">
+                  <FiDollarSign />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-800">Trial Balance (Filtered)</h3>
+                  <p className="text-xs text-gray-500">Totals reflect the current search & filters</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {currencyOptions.length > 1 && (
+                  <select
+                    value={summaryCurrency}
+                    onChange={(e) => setSummaryCurrency(e.target.value)}
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white"
+                    title="Currency for summary"
+                  >
+                    {currencyOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <span
+                  className={`px-2 py-1 text-xs rounded-full ${
+                    isBalancedTB ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }`}
+                >
+                  {isBalancedTB ? 'Balanced' : 'Out of balance'}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">
+              <div className="rounded-lg border border-gray-200 p-4">
+                <div className="text-xs text-gray-500">Total Debits</div>
+                <div className="mt-1 text-xl font-semibold text-gray-900">
+                  {formatMoney(selectedTotals.debit, summaryCurrency || 'USD')}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 p-4">
+                <div className="text-xs text-gray-500">Total Credits</div>
+                <div className="mt-1 text-xl font-semibold text-gray-900">
+                  {formatMoney(selectedTotals.credit, summaryCurrency || 'USD')}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 p-4">
+                <div className="text-xs text-gray-500">Difference</div>
+                <div className={`mt-1 text-xl font-semibold ${
+                  isBalancedTB ? 'text-green-700' : 'text-red-700'
+                }`}>
+                  {formatMoney(tbDifference, summaryCurrency || 'USD')}
+                </div>
+                {!isBalancedTB && (
+                  <p className="mt-1 text-[11px] text-gray-500">Debits and credits should net to zero.</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="mb-4 text-sm font-light text-gray-500">
@@ -545,46 +677,62 @@ const GeneralLedger = () => {
                       Credit
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-light text-gray-500 uppercase tracking-wider">
-                      Status
+                      Status / Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200/50">
                   {currentEntries.map(({ entry, line }, index) => {
-                    const account = getAccountInfo(line);
+                    const accountName = line.chartOfAccount?.accountName || 'Unknown Account';
+                    const accountCode = line.chartOfAccount?.accountNo || 'N/A';
+                    const accountType = line.chartOfAccount?.accountType || 'Unknown';
                     const isBeingPosted = postingId === entry.id;
+
+                    // NEW: flag rows from unbalanced transactions
+                    const isUnbalanced = unbalancedEntryIds.has(entry.id);
+                    const rowCellBaseBorder = isUnbalanced ? 'bg-red-50/40 border-red-400/70' : '';
+
                     return (
-                      <tr 
-                        key={`${entry.id}-${line.id}-${index}`} 
-                        className="hover:bg-gray-50/80 transition-colors"
+                      <tr
+                        key={`${entry.id}-${line.id}-${index}`}
+                        className={`hover:bg-gray-50/80 transition-colors`}
                       >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-light text-gray-500">
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-light text-gray-500 border-y ${rowCellBaseBorder} ${isUnbalanced ? 'border-l-2' : ''}`}>
                           <div className="flex items-center">
                             <FiCalendar className="mr-2 text-gray-400" />
                             {formatDate(entry.transactionDate)}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-light text-gray-900">
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-light text-gray-900 border-y ${rowCellBaseBorder}`}>
                           {entry.referenceNumber || 'N/A'}
                         </td>
-                        <td className="px-6 py-4 text-sm font-light text-gray-900 max-w-xs truncate">
+                        <td className={`px-6 py-4 text-sm font-light text-gray-900 max-w-xs truncate border-y ${rowCellBaseBorder}`}>
                           {line.description || entry.description || 'No description'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-light text-gray-900">
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-light text-gray-900 border-y ${rowCellBaseBorder}`}>
                           <div className="flex flex-col">
-                            <span className="font-normal">{account.name}</span>
-                            <span className="text-gray-500 text-xs">{account.code} ({account.type})</span>
+                            <span className="font-normal">{accountName}</span>
+                            <span className="text-gray-500 text-xs">{accountCode} ({accountType})</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-light text-red-600">
-                          {line.debitAmount !== "0" ? formatCurrency(line.debitAmount, entry.currency?.code || 'USD') : '-'}
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-light text-red-600 border-y ${rowCellBaseBorder}`}>
+                          {line.debitAmount !== '0'
+                            ? formatCurrency(line.debitAmount, entry.currency?.code || 'USD')
+                            : '-'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-light text-green-600">
-                          {line.creditAmount !== "0" ? formatCurrency(line.creditAmount, entry.currency?.code || 'USD') : '-'}
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-light text-green-600 border-y ${rowCellBaseBorder}`}>
+                          {line.creditAmount !== '0'
+                            ? formatCurrency(line.creditAmount, entry.currency?.code || 'USD')
+                            : '-'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
+                        <td className={`px-6 py-4 whitespace-nowrap border-y ${rowCellBaseBorder} ${isUnbalanced ? 'border-r-2' : ''}`}>
+                          <div className="flex items-center flex-wrap gap-2">
                             {getStatusBadge(entry.status)}
+                            {isUnbalanced && (
+                              <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-red-100 text-red-800">
+                                <FiAlertTriangle /> Unbalanced
+                              </span>
+                            )}
                             {entry.status !== 'POSTED' && (
                               <button
                                 onClick={(e) => {
@@ -592,21 +740,19 @@ const GeneralLedger = () => {
                                   handlePostClick(entry.id, entry.status);
                                 }}
                                 disabled={isBeingPosted || postingId !== null}
-                                className={`ml-2 px-3 py-1 text-xs rounded-md flex items-center ${
-                                  isBeingPosted 
-                                  ? 'bg-gray-100 text-gray-500' 
-                                  : 'bg-navy-100 text-navy-700 hover:bg-navy-200'
+                                className={`px-3 py-1 text-xs rounded-md flex items-center ${
+                                  isBeingPosted
+                                    ? 'bg-gray-100 text-gray-500'
+                                    : 'bg-navy-100 text-navy-700 hover:bg-navy-200'
                                 }`}
                               >
                                 {isBeingPosted ? (
                                   <>
-                                    <FiLoader className="animate-spin mr-1" />
-                                    Posting...
+                                    <FiLoader className="animate-spin mr-1" /> Posting...
                                   </>
                                 ) : (
                                   <>
-                                    <FiCheck className="mr-1" />
-                                    Post
+                                    <FiCheck className="mr-1" /> Post
                                   </>
                                 )}
                               </button>
@@ -623,14 +769,14 @@ const GeneralLedger = () => {
             <div className="bg-white px-6 py-3 flex items-center justify-between border-t border-gray-200/50">
               <div className="flex-1 flex justify-between sm:hidden">
                 <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
                   className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-light rounded-md text-gray-700 bg-white hover:bg-gray-50"
                 >
                   Previous
                 </button>
                 <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
                   className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-light rounded-md text-gray-700 bg-white hover:bg-gray-50"
                 >
@@ -648,7 +794,7 @@ const GeneralLedger = () => {
                 <div>
                   <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                     <button
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                       disabled={currentPage === 1}
                       className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-light text-gray-500 hover:bg-gray-50"
                     >
@@ -660,15 +806,15 @@ const GeneralLedger = () => {
                         key={page}
                         onClick={() => setCurrentPage(page)}
                         className={`relative inline-flex items-center px-4 py-2 border text-sm font-light
-                          ${currentPage === page 
-                            ? 'bg-navy-600 text-white border-navy-600' 
+                          ${currentPage === page
+                            ? 'bg-navy-600 text-white border-navy-600'
                             : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
                       >
                         {page}
                       </button>
                     ))}
                     <button
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                       disabled={currentPage === totalPages}
                       className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-light text-gray-500 hover:bg-gray-50"
                     >
@@ -684,6 +830,6 @@ const GeneralLedger = () => {
       </div>
     </>
   );
-}
+};
 
 export default GeneralLedger;
