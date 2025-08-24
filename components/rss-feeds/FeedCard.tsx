@@ -6,14 +6,13 @@ import { categorizeByRegion } from "@/utils/feedUtils";
 
 type FeedCardProps = {
   feed: FeedItem;
-  size?: 'small' | 'medium' | 'large' | 'featured';
+  size?: "small" | "medium" | "large" | "featured";
   className?: string;
 };
 
 // Format date to be more readable
 const formatDate = (dateString?: string) => {
   if (!dateString) return "";
-  
   try {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat("en-US", {
@@ -27,29 +26,31 @@ const formatDate = (dateString?: string) => {
 };
 
 // Enhanced FeedCard with size variants for dynamic grid layouts
-export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProps) => {
+export const FeedCard = ({ feed, size = "medium", className = "" }: FeedCardProps) => {
   const region = categorizeByRegion(feed);
-  const regionDisplay =
-    region === "african" ? "Africa" : "International";
+  const regionDisplay = region === "african" ? "Africa" : "International";
 
   const hasImage =
-    feed.imageUrl || (feed.enclosure && feed.enclosure.url && feed.enclosure.type?.startsWith("image/"));
+    feed.imageUrl ||
+    (feed.enclosure && feed.enclosure.url && feed.enclosure.type?.startsWith("image/"));
   const imageUrl = feed.imageUrl || (feed.enclosure && feed.enclosure.url);
   const formattedDate = formatDate(feed.pubDate);
 
   // Featured card (large with prominent image)
-  if (size === 'featured' && hasImage && imageUrl) {
+  if (size === "featured" && hasImage && imageUrl) {
     return (
-      <article className={`group relative rounded-xl border border-primary-100 bg-white overflow-hidden transition-all duration-300 hover:shadow-lg h-full ${className}`}>
-        <div className="absolute inset-0 bg-gradient-to-t from-primary-950/90 via-primary-900/50 to-primary-900/20 z-10" />
+      <article
+        className={`group relative h-full overflow-hidden rounded-xl border border-primary-100 bg-white transition-all duration-300 hover:shadow-lg ${className}`}
+      >
+        <div className="absolute inset-0 z-10 bg-gradient-to-t from-primary-950/90 via-primary-900/50 to-primary-900/20" />
         <div className="relative h-full min-h-[500px] w-full bg-primary-50">
           <Image
             src={imageUrl}
             alt={feed.title}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-700"
-            priority={true}
+            className="object-cover transition-transform duration-700 group-hover:scale-105"
+            priority
             placeholder="blur"
             blurDataURL="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
           />
@@ -62,8 +63,12 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
                 {formattedDate}
               </time>
             </div>
-            <h3 className="mb-3 text-2xl font-bold leading-tight text-white">{feed.title}</h3>
-            <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-white/90">{feed.contentSnippet}</p>
+            <h3 className="mb-3 text-2xl font-bold leading-tight text-white" title={feed.title}>
+              {feed.title}
+            </h3>
+            <p className="mb-4 line-clamp-2 text-sm leading-relaxed text-white/90">
+              {feed.contentSnippet}
+            </p>
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-white/90">{feed.creator || "Unknown"}</span>
               <a
@@ -83,24 +88,25 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
     );
   }
 
-  // Large card with image
-  if ((size === 'large' || size === 'medium') && hasImage && imageUrl) {
-    const imageHeight = size === 'large' ? 'h-80' : 'h-64';
-    
+  // Large / Medium with image
+  if ((size === "large" || size === "medium") && hasImage && imageUrl) {
+    const imageHeight = size === "large" ? "h-80" : "h-64";
     return (
-      <article className={`group rounded-xl border border-primary-100 bg-white overflow-hidden transition-all duration-300 hover:shadow-lg h-full ${className}`}>
+      <article
+        className={`group h-full overflow-hidden rounded-xl border border-primary-100 bg-white transition-all duration-300 hover:shadow-lg ${className}`}
+      >
         <div className={`relative ${imageHeight} bg-primary-50`}>
           <Image
             src={imageUrl}
             alt={feed.title}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className="object-cover group-hover:scale-102 transition-transform duration-500"
-            priority={size === 'large'}
+            className="object-cover transition-transform duration-500 group-hover:scale-102"
+            priority={size === "large"}
             placeholder="blur"
             blurDataURL="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
           />
-          <div className="absolute top-3 left-3 z-10">
+          <div className="absolute left-3 top-3 z-10">
             <span className="rounded-full bg-primary-600/90 px-2.5 py-1 text-xs font-medium text-white shadow-sm backdrop-blur-sm">
               {regionDisplay}
             </span>
@@ -110,9 +116,7 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
           <div className="mb-3 flex items-center gap-3 text-xs text-primary-500">
             <div className="flex items-center gap-1">
               <Calendar size={14} />
-              <time dateTime={feed.isoDate || feed.pubDate}>
-                {formattedDate}
-              </time>
+              <time dateTime={feed.isoDate || feed.pubDate}>{formattedDate}</time>
             </div>
             {feed.creator && (
               <div className="flex items-center gap-1">
@@ -121,7 +125,13 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
               </div>
             )}
           </div>
-          <h3 className="mb-2 line-clamp-2 text-lg font-semibold text-primary-900 group-hover:text-primary-700 transition-colors">{feed.title}</h3>
+          {/* Title: allow 3 lines and tighter leading for better fit */}
+          <h3
+            className="mb-2 line-clamp-3 text-[14px] font-semibold leading-snug text-primary-900 transition-colors group-hover:text-primary-700"
+            title={feed.title}
+          >
+            {feed.title}
+          </h3>
           <p className="mb-4 line-clamp-2 text-sm text-primary-600/80">{feed.contentSnippet}</p>
           <div className="flex items-center justify-end">
             <a
@@ -140,20 +150,36 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
     );
   }
 
-  // Small card (compact, no image or with small image)
-  if (size === 'small') {
+  // Small card (compact)
+  // Goal: give the TITLE the room. We:
+  // - let the title run for 3 lines (not 2),
+  // - make it bigger and tighter leading,
+  // - trim other elements (no snippet; smaller image),
+  // - add a tooltip (title attr) for full text.
+  if (size === "small") {
     return (
-      <article className={`group rounded-lg border border-primary-100 bg-white overflow-hidden transition-all duration-300 hover:shadow-md h-full ${className}`}>
+      <article
+        className={`group overflow-hidden rounded-xl border border-primary-100 bg-white transition-all duration-300 hover:shadow-md ${className}`}
+      >
         <div className="p-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className={`h-2 w-2 rounded-full bg-primary-600`} aria-hidden />
-            <time className="text-xs text-primary-500" dateTime={feed.isoDate || feed.pubDate}>
+            <span className="h-2 w-2 rounded-full bg-primary-600" aria-hidden />
+            <time className="text-[11px] text-primary-500" dateTime={feed.isoDate || feed.pubDate}>
               {formattedDate}
             </time>
           </div>
-          <h3 className="mb-2 line-clamp-2 text-sm font-semibold text-primary-900 group-hover:text-primary-700 transition-colors">{feed.title}</h3>
+
+          {/* Title given priority */}
+          <h3
+            className="mb-2 line-clamp-3 break-words text-base font-semibold leading-snug text-primary-900 transition-colors group-hover:text-primary-700"
+            title={feed.title}
+          >
+            {feed.title}
+          </h3>
+
+          {/* Optional compact image (reduced height) OR skip snippet to keep title space */}
           {hasImage && imageUrl ? (
-            <div className="relative mb-2 h-32 w-full overflow-hidden rounded-md bg-primary-50">
+            <div className="relative mb-2 h-24 w-full overflow-hidden rounded-md bg-primary-50">
               <Image
                 src={imageUrl}
                 alt={feed.title}
@@ -164,10 +190,10 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
                 blurDataURL="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
               />
             </div>
-          ) : (
-            <p className="mb-2 line-clamp-2 text-xs text-primary-600/80">{feed.contentSnippet}</p>
-          )}
-          <div className="flex items-center justify-between">
+          ) : null}
+
+          <div className="mt-2 flex items-center justify-between">
+            <span className="truncate text-[11px] text-primary-500">{regionDisplay}</span>
             <a
               href={feed.link}
               target="_blank"
@@ -185,9 +211,10 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
 
   // Default card (no image)
   return (
-    <article className={`group rounded-xl border border-primary-100 bg-white overflow-hidden transition-all duration-300 shadow-sm hover:shadow focus-within:ring-2 focus-within:ring-primary-200 h-full ${className}`}>
+    <article
+      className={`group h-full overflow-hidden rounded-xl border border-primary-100 bg-white shadow-sm transition-all duration-300 hover:shadow focus-within:ring-2 focus-within:ring-primary-200 ${className}`}
+    >
       <div className="h-1.5 bg-gradient-to-r from-primary-500 to-primary-700" />
-
       <div className="p-5">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -203,8 +230,17 @@ export const FeedCard = ({ feed, size = 'medium', className = '' }: FeedCardProp
           </time>
         </div>
 
-        <h3 className="mb-3 line-clamp-2 text-base font-semibold leading-tight text-primary-900 group-hover:text-primary-700 transition-colors">{feed.title}</h3>
-        <p className="mb-4 line-clamp-3 text-sm leading-relaxed text-primary-600/80">{feed.contentSnippet}</p>
+        {/* Title: up to 3 lines */}
+        <h3
+          className="mb-3 line-clamp-3 text-[14px] font-light leading-snug text-primary-900 transition-colors group-hover:text-primary-700"
+          title={feed.title}
+        >
+          {feed.title}
+        </h3>
+
+        <p className="mb-4 line-clamp-3 text-sm leading-relaxed text-primary-600/80">
+          {feed.contentSnippet}
+        </p>
 
         <div className="flex items-center justify-between border-t border-primary-100 pt-3">
           <div className="flex items-center gap-2">

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { BarChart3, TrendingUp, Users, Calendar, DollarSign, Activity, Target, Award, Download, Plus, ChevronDown, Building2, ArrowLeftRight, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
+
 interface UserData {
   id: string;
   firstName: string;
@@ -103,6 +104,18 @@ interface ComparisonChartDataPoint {
   secondTargetCumulative: number;
   firstTargetAmount: number;
   secondTargetAmount: number;
+}
+
+const getGreeting = (): string => {
+  const hour = new Date().getHours()
+  
+  if (hour < 12) {
+    return "Good morning"
+  } else if (hour < 17) {
+    return "Good afternoon"
+  } else {
+    return "Good evening"
+  }
 }
 
 const Dashboard = () => {
@@ -512,11 +525,11 @@ const Dashboard = () => {
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
             {userLoading ? (
               <div className="flex items-center space-x-3">
-                <span>Good morning,</span>
+                <span>{getGreeting()},</span>
                 <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
               </div>
             ) : (
-              `Good morning, ${userData ? `${userData.firstName} ${userData.lastName}` : 'admin'}`
+              `${getGreeting()}, ${userData ? `${userData.firstName} ${userData.lastName}` : 'admin'}`
             )}
           </h1>
         </div>
