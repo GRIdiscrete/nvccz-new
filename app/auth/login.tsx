@@ -46,6 +46,7 @@ export default function LoginPage() {
 
       if (data?.success && data?.token && data?.user?.id) {
         sessionStorage.setItem('token', data.token)
+        console.log(data.token)
         sessionStorage.setItem('userID', String(data.user.id))
         router.push('/')
         return

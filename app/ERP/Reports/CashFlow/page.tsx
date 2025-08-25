@@ -74,15 +74,16 @@ const CASH_ACCOUNT_HINTS = ['cash and cash equivalents', 'cash', 'bank'];
 
 function parseAmount(s: string | number | null | undefined): number {
   if (s === null || s === undefined) return 0;
-  if (typeof s === 'number') return s;
-  const n = parseFloat(String(s));
-  return isNaN(n) ? 0 : n;
+  if (typeof s === 'number') return Number.isFinite(s) ? s : 0;
+  const n = Number(String(s).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : 0;
 }
 
 function isCashLine(line: JournalEntryLine): boolean {
   const name = (line.chartOfAccount?.accountName || '').toLowerCase();
   const no = (line.chartOfAccount?.accountNo || '').toLowerCase();
-  return CASH_ACCOUNT_HINTS.some((h) => name.includes(h)) || no === '1000'; // per sample
+  // treat anything clearly labeled as cash/bank as cash-like; keep sample's 1000 too
+  return CASH_ACCOUNT_HINTS.some((h) => name.includes(h)) || no === '1000';
 }
 
 function classifyAccountToSection(coa: ChartOfAccount): Section {
@@ -90,34 +91,20 @@ function classifyAccountToSection(coa: ChartOfAccount): Section {
   const type = (coa.accountType || '').toLowerCase();
   const no = (coa.accountNo || '').trim();
 
-  // Income statement items -> Operating
   if (fs.includes('income')) return 'Operating';
 
-  // Balance sheet heuristics
   if (type.includes('non') && type.includes('asset')) return 'Investing';
-  if (
-    type.includes('fixed') ||
-    type.includes('property') ||
-    type.includes('equipment') ||
-    type.includes('intangible')
-  )
+  if (type.includes('fixed') || type.includes('property') || type.includes('equipment') || type.includes('intangible'))
     return 'Investing';
 
-  if (
-    type.includes('equity') ||
-    (type.includes('long') && type.includes('liability')) ||
-    (type.includes('non') && type.includes('liability'))
-  )
+  if (type.includes('equity') || (type.includes('long') && type.includes('liability')) || (type.includes('non') && type.includes('liability')))
     return 'Financing';
 
-  // Account number hints (typical charts: 1=Assets, 2=Liabilities, 3=Equity, 4=Revenue, 5=Expense)
-  if (/^3/.test(no)) return 'Financing'; // equity
-  if (/^2/.test(no) && !type.includes('current')) return 'Financing'; // long-term liabilities
+  if (/^3/.test(no)) return 'Financing';
+  if (/^2/.test(no) && !type.includes('current')) return 'Financing';
 
-  // Working capital (current assets/liabilities) -> Operating
   if (type.includes('current asset') || type.includes('current liability')) return 'Operating';
 
-  // Fallback
   return 'Operating';
 }
 
@@ -144,6 +131,9 @@ const CashFlow: React.FC = () => {
     return d.toISOString().split('T')[0];
   });
   const [toDate, setToDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+
+  // Currency selector — default to USD, never mix currencies
+  const [currencyChoice, setCurrencyChoice] = useState<string>('USD');
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -172,39 +162,63 @@ const CashFlow: React.FC = () => {
     fetchEntries();
   }, [fetchEntries]);
 
+  // Unique currency codes present in data
+  const currencyCodes = useMemo(
+    () => Array.from(new Set(entries.map((e) => (e.currency?.code || '').toUpperCase()).filter(Boolean))),
+    [entries]
+  );
+
+  // Ensure default stays valid: prefer USD, otherwise first available
+  useEffect(() => {
+    if (!entries.length) return;
+    const codes = currencyCodes;
+    if (!codes.includes(currencyChoice)) {
+      if (codes.includes('USD')) setCurrencyChoice('USD');
+      else if (codes[0]) setCurrencyChoice(codes[0]);
+    }
+  }, [entries, currencyCodes, currencyChoice]);
+
   const filtered = useMemo(() => {
     const start = new Date(fromDate + 'T00:00:00');
     const end = new Date(toDate + 'T23:59:59');
+
     return entries.filter((e) => {
       const t = new Date(e.transactionDate);
-      return t >= start && t <= end;
+      if (t < start || t > end) return false;
+      return (e.currency?.code || '').toUpperCase() === (currencyChoice || '').toUpperCase();
     });
-  }, [entries, fromDate, toDate]);
+  }, [entries, fromDate, toDate, currencyChoice]);
 
-  // Build cash-flow rows:
-  // 1) Identify the cash line in each entry.
-  // 2) cashImpact = debit - credit on cash line (assets: debit increases -> inflow).
-  // 3) Attribute the entire cashImpact to the single largest non-cash line (dominant driver) to avoid double-counting.
+  // Build cash-flow rows per *selected* currency only:
+  // 1) Sum across all cash lines (Σ(debit - credit)).
+  // 2) Skip if net is 0 (cash<->cash transfers).
+  // 3) Section from dominant non-cash line.
   const rows: ClassifiedRow[] = useMemo(() => {
     const r: ClassifiedRow[] = [];
-    for (const je of filtered) {
-      const cash = je.journalEntryLines.find(isCashLine);
-      if (!cash) continue; // no cash movement
 
-      const debit = parseAmount(cash.debitAmount);
-      const credit = parseAmount(cash.creditAmount);
-      const cashImpact = debit - credit; // +inflow, -outflow
+    for (const je of filtered) {
+      const cashLines = je.journalEntryLines.filter(isCashLine);
+      if (cashLines.length === 0) continue;
+
+      const cashImpact = cashLines.reduce((sum, line) => {
+        const debit = parseAmount(line.debitAmount);
+        const credit = parseAmount(line.creditAmount);
+        return sum + (debit - credit);
+      }, 0);
+
+      if (Math.abs(cashImpact) < 1e-9) continue;
 
       const nonCash = je.journalEntryLines.filter((l) => !isCashLine(l));
-      if (nonCash.length === 0) continue;
+      const dominant =
+        nonCash.length === 0
+          ? null
+          : nonCash.reduce((max, cur) => {
+              const curAmt = Math.max(parseAmount(cur.debitAmount), parseAmount(cur.creditAmount));
+              const maxAmt = Math.max(parseAmount(max.debitAmount), parseAmount(max.creditAmount));
+              return curAmt > maxAmt ? cur : max;
+            }, nonCash[0]);
 
-      const dominant = nonCash.reduce((max, cur) => {
-        const curAmt = Math.max(parseAmount(cur.debitAmount), parseAmount(cur.creditAmount));
-        const maxAmt = Math.max(parseAmount(max.debitAmount), parseAmount(max.creditAmount));
-        return curAmt > maxAmt ? cur : max;
-      }, nonCash[0]);
-
-      const section = classifyAccountToSection(dominant.chartOfAccount);
+      const section = dominant ? classifyAccountToSection(dominant.chartOfAccount) : 'Operating';
 
       r.push({
         entryId: je.id,
@@ -216,6 +230,7 @@ const CashFlow: React.FC = () => {
         currency: je.currency?.code || '—',
       });
     }
+
     return r.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [filtered]);
 
@@ -226,17 +241,21 @@ const CashFlow: React.FC = () => {
     return { ...t, NetChange: net };
   }, [rows]);
 
-  const currencyHint = useMemo(() => {
-    if (rows.length > 0) return rows[0].currency;
-    if (entries.length > 0) return entries[0].currency?.code || '';
-    return '';
-  }, [rows, entries]);
+  const formatMoney = (n: number) => {
+    try {
+      const ccy = currencyChoice || 'USD';
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy }).format(n);
+    } catch {
+      return n.toFixed(2);
+    }
+  };
 
   // Export to Excel using SheetJS
   const exportToExcel = () => {
     const statement = [
       ['Cash Flow Statement'],
       [`Period: ${fromDate} to ${toDate}`],
+      [`Currency: ${currencyChoice || 'USD'}`],
       [''],
       ['Section', 'Amount'],
       ['Operating Activities', totals.Operating],
@@ -262,15 +281,7 @@ const CashFlow: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, ws1, 'Statement');
     XLSX.utils.book_append_sheet(wb, ws2, 'Details');
 
-    XLSX.writeFile(wb, `CashFlow_${fromDate}_to_${toDate}.xlsx`);
-  };
-
-  const formatMoney = (n: number) => {
-    try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyHint || 'USD' }).format(n);
-    } catch {
-      return n.toFixed(2);
-    }
+    XLSX.writeFile(wb, `CashFlow_${fromDate}_to_${toDate}_${currencyChoice || 'USD'}.xlsx`);
   };
 
   return (
@@ -287,7 +298,7 @@ const CashFlow: React.FC = () => {
           <div>
             <h1 className="text-3xl font-light text-gray-800 tracking-tight">Cash Flow Statement</h1>
             <p className="text-gray-500 font-light">
-              Modern, direct-method cash flows derived from the general ledger
+              Direct-method cash flows derived from the general ledger — single-currency view
             </p>
           </div>
         </div>
@@ -316,7 +327,7 @@ const CashFlow: React.FC = () => {
           <FiFilter />
           <span className="text-sm font-medium">Filters</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">From</label>
             <div className="relative">
@@ -341,6 +352,26 @@ const CashFlow: React.FC = () => {
               />
             </div>
           </div>
+
+          {/* Currency selector (no ALL option; default USD) */}
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Currency</label>
+            <select
+              value={currencyChoice}
+              onChange={(e) => setCurrencyChoice(e.target.value)}
+              className="w-full p-2 border rounded-md bg-white"
+            >
+              {currencyCodes.includes('USD') && <option value="USD">USD</option>}
+              {currencyCodes
+                .filter((c) => c !== 'USD')
+                .map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+            </select>
+          </div>
+
           <div className="flex items-end">
             <button
               onClick={() => fetchEntries()}
@@ -421,8 +452,8 @@ const CashFlow: React.FC = () => {
           <div>
             <h2 className="text-lg font-medium">Cash Movements (Details)</h2>
             <p className="text-xs text-gray-500">
-              Derived by detecting entries that touch a cash/bank account and attributing the impact to the dominant
-              counter account.
+              We detect entries that touch a cash/bank account and attribute the net cash impact to the dominant
+              counter account for section classification. Cash impact is summed across all cash lines in an entry.
             </p>
           </div>
           <div className="text-xs text-gray-500 flex items-center gap-1">
@@ -446,7 +477,7 @@ const CashFlow: React.FC = () => {
                   Section
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cash Impact ({currencyHint || '—'})
+                  Cash Impact ({currencyChoice || 'USD'})
                 </th>
               </tr>
             </thead>
@@ -460,7 +491,7 @@ const CashFlow: React.FC = () => {
               ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-gray-500">
-                    No cash movements in this period.
+                    No cash movements in this period for {currencyChoice}.
                   </td>
                 </tr>
               ) : (

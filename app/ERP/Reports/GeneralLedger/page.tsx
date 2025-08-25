@@ -300,6 +300,7 @@ const GeneralLedger = () => {
         if (refreshResponse.ok) {
           const refreshData: ApiResponse = await refreshResponse.json();
           if (refreshData.success && refreshData.data) {
+            console.log(refreshData.data)
             setJournalEntries(refreshData.data);
             setFilteredEntries(refreshData.data);
             const totalLines = refreshData.data.reduce((sum, entry) => sum + (entry.journalEntryLines?.length || 0), 0);
