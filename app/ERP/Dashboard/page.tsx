@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FiTrendingUp, FiTrendingDown, FiDollarSign, FiCreditCard, FiActivity, FiPieChart } from 'react-icons/fi';
 
-
 import { Controls } from '@/components/finance/Controls';
-
 import { MonthlyTrendsChart } from '@/components/finance/MonthlyTrendsChart';
 import { QuickStats } from '@/components/finance/QuickStats';
 
@@ -22,7 +20,7 @@ const Dashboard = () => {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
 
   const [basis, setBasis] = useState<Basis>('accrual');
-  const [currencyChoice, setCurrencyChoice] = useState<CurrencyChoice>('ALL');
+  const [currencyChoice, setCurrencyChoice] = useState<CurrencyChoice>('USD');
   const [compareRange, setCompareRange] = useState<ComparisonRange>('month');
   const [displayCurrency, setDisplayCurrency] = useState<string>('USD');
 
@@ -41,10 +39,14 @@ const Dashboard = () => {
         const body = await response.json();
         if (!body.success) throw new Error(body.message || 'Failed to retrieve journal entries');
 
-        const data: JournalEntry[] = body.data || [];
-        setEntries(data);
+        const all: JournalEntry[] = body.data || [];
 
-        const first = data.find((e) => e.currency?.code)?.currency?.code;
+        // ✅ Only include POSTED transactions
+        const posted = all.filter((e) => (e.status || '').toUpperCase() === 'POSTED');
+
+        setEntries(posted);
+
+        const first = posted.find((e) => e.currency?.code)?.currency?.code;
         setDisplayCurrency(first || 'USD');
       } catch (err: any) {
         setError(err?.message || 'An unknown error occurred');
@@ -54,14 +56,14 @@ const Dashboard = () => {
     })();
   }, []);
 
-  // Filter by currency
+  // Filter by currency (after POSTED filter)
   const filtered = useMemo(() => {
-    if (currencyChoice === 'ALL') return entries;
+
     return entries.filter((e) => (e.currency?.code || '').toUpperCase() === currencyChoice);
   }, [entries, currencyChoice]);
 
   useEffect(() => {
-    setDisplayCurrency(currencyChoice === 'ALL' ? (filtered[0]?.currency?.code || 'USD') : currencyChoice);
+    setDisplayCurrency(currencyChoice === 'USD' ? (filtered[0]?.currency?.code || 'USD') : currencyChoice);
   }, [filtered, currencyChoice]);
 
   // Compute metrics with selected comparison range

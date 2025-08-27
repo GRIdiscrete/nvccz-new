@@ -1,5 +1,5 @@
 export type Basis = 'accrual' | 'cash';
-export type CurrencyChoice = 'ALL' | 'ZWL' | 'USD';
+export type CurrencyChoice =  'ZWL' | 'USD';
 export type ComparisonRange = 'week' | 'month' | 'quarter' | 'year';
 
 export type ApexSeries = { name?: string; data: number[] }[];
@@ -14,6 +14,8 @@ export interface JournalEntry {
   status: string;
   journalEntryLines: JournalEntryLine[];
   currency?: { id?: string; code?: string; name?: string; symbol?: string };
+  // Optional entry-level payment method (not used in calcs, preference is per-line)
+  paymentMethod?: string | null;
 }
 
 export interface JournalEntryLine {
@@ -37,6 +39,8 @@ export interface JournalEntryLine {
     createdAt: string;
     updatedAt: string;
   };
+  // ✅ New field from API
+  paymentMethod?: string | null; // e.g. "CASH" | "EFT" | null
 }
 
 export interface AccountSummary {

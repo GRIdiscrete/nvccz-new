@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   FiMenu,
   FiX,
@@ -14,6 +14,8 @@ import {
   FiTool,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
+import { ArrowBigLeft } from "lucide-react";
+import Image from "next/image";
 
 // --- Types ------------------------------------------------------
 interface Role {
@@ -154,18 +156,13 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
         icon: <FiTool className="shrink-0" />,
         path: "/ERP/Tools",
         adminOnly: true,
-      },
-      {
-        id: "Home",
-        title: "Home",
-        icon: <FiHome className="shrink-0" />,
-        path: "/",
-      },
+      }
     ],
     []
   );
+  const router = useRouter();
 
-  // --- Role-aware filtering (fixes original logic) --------------
+  // --- Role-aware filtering ------------------------------------
   const filteredMenuItems = useMemo(() => {
     const filterItem = (item: MenuItem): MenuItem | null => {
       if (item.adminOnly && !isAdmin) return null;
@@ -183,7 +180,8 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
   }, [menuItems, isAdmin]);
 
   // --- Helpers --------------------------------------------------
-  const isActive = (path?: string) => !!path && (pathname === path || pathname.startsWith(`${path}/`));
+  const isActive = (path?: string) =>
+    !!path && (pathname === path || pathname.startsWith(`${path}/`));
 
   const toggleSubMenu = (menuId: string) => {
     setExpandedMenuItems((prev) =>
@@ -196,7 +194,8 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
     const toExpand = filteredMenuItems
       .filter((i) => i.subItems?.some((s) => isActive(s.path)))
       .map((i) => i.id);
-    if (toExpand.length) setExpandedMenuItems((prev) => Array.from(new Set([...prev, ...toExpand])));
+    if (toExpand.length)
+      setExpandedMenuItems((prev) => Array.from(new Set([...prev, ...toExpand])));
   }, [pathname, filteredMenuItems]);
 
   // --- UI -------------------------------------------------------
@@ -209,17 +208,24 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
         } flex flex-col`}
       >
         {/* Brand + Collapse */}
-        <div className="flex items-center justify-between px-3 py-3 border-b border-slate-200/60">
+        <div
+          className="flex cursor-pointer items-center justify-between px-3 py-3 border-b border-slate-200/60"
+          onClick={() => router.push("/")}
+        >
           {!isMenuCollapsed ? (
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-sky-500 shadow-sm" />
-              <div className="leading-tight">
-                <p className="text-sm font-semibold tracking-tight text-slate-800">NVCCZ</p>
-                <p className="text-[11px] text-slate-500 -mt-0.5">Accounting</p>
+              <div className="h-8 w-8 rounded-xl bg-[#18c4d8] shadow-sm flex items-center justify-center text-white">
+                <ArrowBigLeft />
+              </div>
+              <div className="leading-tight ">
+                <p className="text-sm font-semibold tracking-tight text-slate-800">
+                  <Image alt="Logo" src={"/Logo-5.png"} width={60} height={60} />
+                </p>
+                <p className="text-[8px] text-slate-500 -mt-0.5 tracking-widest">ACCOUNTING</p>
               </div>
             </div>
           ) : (
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-600 to-sky-500 shadow-sm" />
+            <div className="h-8 w-8 rounded-xl bg-[#18c4d8] shadow-sm" />
           )}
 
           <button
@@ -241,7 +247,11 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
             // Single-link item
             if (item.path && !item.subItems) {
               return (
-                <Link key={item.id} href={item.path} title={isMenuCollapsed ? item.title : undefined}>
+                <Link
+                  key={item.id}
+                  href={item.path}
+                  title={isMenuCollapsed ? item.title : undefined}
+                >
                   <motion.div
                     whileHover={{ x: isMenuCollapsed ? 0 : 4 }}
                     className={`group relative mb-1.5 flex items-center rounded-xl px-3 py-2 text-sm transition-all ${
@@ -250,22 +260,26 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
                         : "text-slate-600 hover:bg-white/80 hover:shadow-sm"
                     }`}
                   >
-                    <span className={`mr-3 grid h-8 w-8 place-items-center rounded-lg border ${
+                    <span
+                      className={`mr-3 grid h-8 w-8 place-items-center rounded-lg border ${
                         activeTop
-                          ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                          ? "border-[#18c4d8]/30 bg-[#18c4d8]/10 text-[#18c4d8]"
                           : "border-slate-200 bg-white text-slate-500 group-hover:border-slate-300"
-                      }`}>
+                      }`}
+                    >
                       {item.icon}
                     </span>
                     {!isMenuCollapsed && (
-                      <span className="truncate font-medium tracking-tight">{item.title}</span>
+                      <span className="truncate font-medium tracking-tight">
+                        {item.title}
+                      </span>
                     )}
 
                     {/* Active indicator */}
                     {activeTop && (
                       <motion.span
                         layoutId="active-dot"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-indigo-500"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-[#18c4d8]"
                       />
                     )}
                   </motion.div>
@@ -288,28 +302,32 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
                   title={isMenuCollapsed ? item.title : undefined}
                 >
                   <div className="flex items-center">
-                    <span className={`mr-3 grid h-8 w-8 place-items-center rounded-lg border ${
+                    <span
+                      className={`mr-3 grid h-8 w-8 place-items-center rounded-lg border ${
                         isGroupActive
-                          ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+                          ? "border-[#18c4d8]/30 bg-[#18c4d8]/10 text-[#18c4d8]"
                           : "border-slate-200 bg-white text-slate-500 group-hover:border-slate-300"
-                      }`}>
+                      }`}
+                    >
                       {item.icon}
                     </span>
                     {!isMenuCollapsed && (
-                      <span className="truncate font-medium tracking-tight">{item.title}</span>
+                      <span className="truncate font-medium tracking-tight">
+                        {item.title}
+                      </span>
                     )}
                   </div>
                   {!isMenuCollapsed && (
                     <FiChevronDown
                       className={`transition-transform ${expanded ? "rotate-180" : "rotate-0"}`}
                       size={16}
-                    />)
-                  }
+                    />
+                  )}
 
                   {isGroupActive && (
                     <motion.span
                       layoutId="active-dot"
-                      className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-indigo-500"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r bg-[#18c4d8]"
                     />
                   )}
                 </button>
@@ -337,11 +355,13 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
                                     : "text-slate-600 hover:bg-white/70"
                                 }`}
                               >
-                                <span className="font-medium tracking-tight">{sub.title}</span>
+                                <span className="font-medium tracking-tight">
+                                  {sub.title}
+                                </span>
                                 {active && (
                                   <motion.span
                                     layoutId="active-sub"
-                                    className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-1 rounded-r bg-indigo-500"
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-1 rounded-r bg-[#18c4d8]"
                                   />
                                 )}
                               </motion.div>
@@ -381,10 +401,14 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
             {/* Breadcrumb-like header */}
             {(() => {
               const top = filteredMenuItems.find((i) => i.path && isActive(i.path));
-              const sub = filteredMenuItems.flatMap((i) => i.subItems || []).find((s) => isActive(s.path));
+              const sub = filteredMenuItems
+                .flatMap((i) => i.subItems || [])
+                .find((s) => isActive(s.path));
               if (top) return top.title;
               if (sub) {
-                const parent = filteredMenuItems.find((i) => i.subItems?.some((s) => s.id === sub.id));
+                const parent = filteredMenuItems.find((i) =>
+                  i.subItems?.some((s) => s.id === sub.id)
+                );
                 return parent ? `${parent.title} / ${sub.title}` : sub.title;
               }
               return "";
