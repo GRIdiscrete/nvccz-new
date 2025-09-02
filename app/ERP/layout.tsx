@@ -134,6 +134,20 @@ const ERP = ({ children }: { children: React.ReactNode }) => {
         path: "/ERP/Dashboard",
       },
       {
+        id: "Portfolio",
+        title: "Portfolio",
+        icon: <FiDollarSign className="shrink-0" />,
+        path: "/ERP/Portfolio",
+        subItems: [
+          { id: "portfolio-overview", title: "Overview", path: "/ERP/Portfolio" },
+          { id: "applications", title: "Applications", path: "/ERP/Portfolio/applications" },
+          { id: "due-diligence", title: "Due Diligence", path: "/ERP/Portfolio/due-diligence" },
+          { id: "funds", title: "Funds", path: "/ERP/Portfolio/funds" },
+          { id: "companies", title: "Portfolio Companies", path: "/ERP/Portfolio/companies" },
+          { id: "investments", title: "Investments", path: "/ERP/Portfolio/investments" },
+        ],
+      },
+      {
         id: "Accounting",
         title: "Accounting",
         icon: <FiDollarSign className="shrink-0" />,
