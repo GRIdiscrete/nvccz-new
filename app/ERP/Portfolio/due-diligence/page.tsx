@@ -449,6 +449,8 @@ function DueDiligenceForm({
   onClose: () => void; 
   onSave: () => void; 
 }) {
+  type Recommendation = 'APPROVE' | 'REJECT' | 'CONDITIONAL';
+
   const [form, setForm] = useState({
     marketResearchViable: true,
     marketResearchComments: '',
@@ -462,7 +464,7 @@ function DueDiligenceForm({
     legalComments: '',
     riskTolerable: true,
     riskComments: '',
-    recommendation: 'APPROVE' as const,
+    recommendation: 'APPROVE' as Recommendation,
     finalComments: ''
   });
 
@@ -483,7 +485,7 @@ function DueDiligenceForm({
         legalComments: application.dueDiligence.legalComments,
         riskTolerable: application.dueDiligence.riskTolerable,
         riskComments: application.dueDiligence.riskComments,
-        recommendation: application.dueDiligence.recommendation,
+        recommendation: application.dueDiligence.recommendation as Recommendation,
         finalComments: application.dueDiligence.finalComments
       });
     }
@@ -681,7 +683,7 @@ function DueDiligenceForm({
               </label>
               <select
                 value={form.recommendation}
-                onChange={(e) => setForm(prev => ({ ...prev, recommendation: e.target.value as any }))}
+                onChange={(e) => setForm(prev => ({ ...prev, recommendation: e.target.value as Recommendation }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="APPROVE">Approve</option>
